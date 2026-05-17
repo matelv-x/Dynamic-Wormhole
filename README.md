@@ -23,7 +23,6 @@ It is designed to work on both clean SG1 v4 installs and modified images without
   - `use_dynamic_wormhole`
   - `use_dynamic_wormhole_for_incoming`
 - Creates a full timestamped backup before modifying files
-- Does **not** modify TMC2209, stepper, MotorHat, DHD, volume meter, incoming history, retro CSS, or crosshair settings
 
 ---
 
@@ -104,24 +103,6 @@ config/defaults-milkyway/config.json.dist
 ```
 
 The installer injects only the required lines instead of replacing the full files.
-
----
-
-## What This Patch Does Not Change
-
-This patch does not change:
-
-- `retro/css/dial.css`
-- `retro/css/dial9.css`
-- center crosshair / yellow plus / red dot
-- TMC2209 parameters
-- stepper parameters
-- MotorHat configuration
-- DHD LED tests
-- volume meter
-- incoming history
-- alarm clock
-- retro dial pages
 
 ---
 
