@@ -27,22 +27,6 @@ It is designed to work on both clean SG1 v4 installs and modified images without
 
 ---
 
-## Screenshots / Preview
-
-### Debug UI popup
-
-![Debug UI popup](images/debug-popup.svg)
-
-### Dynamic Wormhole concept
-
-![Dynamic Wormhole concept](images/dynamic-wormhole.svg)
-
-### Black Hole concept
-
-![Black Hole concept](images/black-hole.svg)
-
----
-
 ## Installation
 
 Copy the ZIP/repo folder to your Raspberry Pi, then run:
