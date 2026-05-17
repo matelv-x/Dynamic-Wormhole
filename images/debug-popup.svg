@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700">
+<rect width="1200" height="700" fill="#0b0f14"/>
+<rect x="80" y="70" width="1040" height="560" rx="20" fill="#111820" stroke="#2b91ff" stroke-width="3"/>
+<text x="110" y="125" fill="#ffffff" font-size="42" font-family="Arial">Testing &amp; Debug | Stargate Command</text>
+<text x="110" y="210" fill="#ffcc66" font-size="34" font-family="Arial">Wormhole Manual Control</text>
+<rect x="110" y="245" width="250" height="70" rx="8" fill="#263544" stroke="#9aa8b8"/>
+<text x="145" y="290" fill="#ffffff" font-size="28" font-family="Arial">Open Wormhole</text>
+<rect x="390" y="245" width="230" height="70" rx="8" fill="#263544" stroke="#9aa8b8"/>
+<text x="430" y="290" fill="#ffffff" font-size="28" font-family="Arial">Close Wormhole</text>
+<rect x="380" y="350" width="440" height="250" rx="18" fill="#151c24" stroke="#00d7ff" stroke-width="3"/>
+<text x="440" y="405" fill="#00d7ff" font-size="32" font-family="Arial">Select Wormhole Type</text>
+<rect x="460" y="435" width="280" height="45" rx="6" fill="#223042" stroke="#9aa8b8"/>
+<text x="500" y="466" fill="#ffffff" font-size="22" font-family="Arial">Standard Wormhole</text>
+<rect x="460" y="495" width="280" height="45" rx="6" fill="#10384b" stroke="#00d7ff"/>
+<text x="505" y="526" fill="#ffffff" font-size="22" font-family="Arial">Dynamic Wormhole</text>
+<rect x="460" y="555" width="280" height="45" rx="6" fill="#421018" stroke="#ff3355"/>
+<text x="535" y="586" fill="#ffffff" font-size="22" font-family="Arial">Black Hole</text>
+</svg>
