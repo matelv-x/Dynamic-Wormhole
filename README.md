@@ -32,8 +32,9 @@ Copy the ZIP/repo folder to your Raspberry Pi, then run:
 
 ```bash
 cd /home/pi
-unzip dynamic_wormhole_only_with_config_patch.zip
-cd dynamic_wormhole_only_with_config_patch
+unzip Dynamic-Wormhole-main.zip
+cd Dynamic-Wormhole-main
+chmod +x install.sh
 sudo ./install.sh /home/pi/sg1_v4
 sudo systemctl restart stargate.service
 ```
@@ -41,7 +42,7 @@ sudo systemctl restart stargate.service
 If installing from a cloned repo:
 
 ```bash
-cd /home/pi/sg1-dynamic-wormhole
+cd /home/pi/Dynamic-Wormhole-main
 sudo ./install.sh /home/pi/sg1_v4
 sudo systemctl restart stargate.service
 ```
