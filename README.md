@@ -32,7 +32,7 @@ Copy the ZIP/repo folder to your Raspberry Pi, then run:
 
 ```bash
 cd /home/pi
-unzip dynamic-wormhole.zip
+unzip dynamic_wormhole_only_with_config_patch.zip
 cd dynamic_wormhole_only_with_config_patch
 sudo ./install.sh /home/pi/sg1_v4
 sudo systemctl restart stargate.service
@@ -136,3 +136,16 @@ sudo systemctl start stargate.service
 
 This patch is provided as a hobby add-on for Stargate fan projects.  
 Use at your own risk and always keep backups.
+
+
+## Final compatibility fixes
+
+This installer includes universal endpoint handling:
+
+- If `/do/dynamic_wormhole_on` exists, it continues.
+- If `/do/dynamic_wormhole_on` is missing, it adds it.
+- If `/do/blackhole_on` exists, it continues.
+- If `/do/blackhole_on` is missing, it adds it.
+- If the image does not contain a `blackhole_on` marker, it uses `wormhole_on` as the insertion point.
+
+The Open Wormhole button keeps the normal debug button style while blocking the default `controlButton` click handler, so the popup opens without the extra “Failed to communicate with Stargate” message.

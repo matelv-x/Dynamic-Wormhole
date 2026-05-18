@@ -84,8 +84,15 @@ web_server = target / "classes/web_server.py"
 if web_server.exists():
     s = read(web_server)
 
+    # Universal endpoint injection:
+    # - if dynamic_wormhole_on exists, keep it
+    # - if blackhole_on exists, keep it
+    # - if missing, add endpoint(s)
+    # - use blackhole_on, wormhole_on, or wormhole_off as safe insertion marker
+    endpoint_block = ""
+
     if "/do/dynamic_wormhole_on" not in s:
-        block = '''            elif self.path == "/do/dynamic_wormhole_on":
+        endpoint_block += '''            elif self.path == "/do/dynamic_wormhole_on":
                 if not self.stargate.wormhole_active:
                     self.stargate.black_hole = False
                     self.stargate.manual_dynamic_override = True
@@ -95,15 +102,38 @@ if web_server.exists():
                     data = { "success": False, "message": "A wormhole is already established." }
 
 '''
-        marker1 = '            elif self.path == "/do/blackhole_on":'
-        marker2 = "            elif self.path == '/do/blackhole_on':"
 
-        if marker1 in s:
-            s = s.replace(marker1, block + marker1, 1)
-        elif marker2 in s:
-            s = s.replace(marker2, block + marker2, 1)
-        else:
-            raise SystemExit("ERROR: Could not find /do/blackhole_on marker in web_server.py")
+    if "/do/blackhole_on" not in s:
+        endpoint_block += '''            elif self.path == "/do/blackhole_on":
+                if not self.stargate.wormhole_active:
+                    self.stargate.black_hole = True
+                    self.stargate.manual_dynamic_override = None
+                    self.stargate.wormhole_active = True
+                    data = { "success": True }
+                else:
+                    data = { "success": False, "message": "A wormhole is already established." }
+
+'''
+
+    if endpoint_block:
+        markers = [
+            '            elif self.path == "/do/blackhole_on":',
+            "            elif self.path == '/do/blackhole_on':",
+            '            elif self.path == "/do/wormhole_on":',
+            "            elif self.path == '/do/wormhole_on':",
+            '            elif self.path == "/do/wormhole_off":',
+            "            elif self.path == '/do/wormhole_off':",
+        ]
+
+        inserted = False
+        for marker in markers:
+            if marker in s:
+                s = s.replace(marker, endpoint_block + marker, 1)
+                inserted = True
+                break
+
+        if not inserted:
+            raise SystemExit("ERROR: Could not find wormhole endpoint marker in web_server.py")
 
     write(web_server, s)
     print(f"Patched web_server.py: {web_server}")
@@ -160,9 +190,9 @@ if debug_html.exists():
 <!-- DYNAMIC WORMHOLE ONLY PATCH START -->
 <script type="text/javascript">
   $(function() {
-    $('#openWormholeMenuButton').off('click.dynamicWormholeOnly').on('click.dynamicWormholeOnly', function(e) {
+    $('#openWormholeMenuButton').off('click').off('click.dynamicWormholeOnly').on('click.dynamicWormholeOnly', function(e) {
       e.preventDefault();
-      e.stopPropagation();
+      e.stopImmediatePropagation();
 
       $('#wormholePickerDialog').dialog({
         modal: true,
@@ -173,7 +203,7 @@ if debug_html.exists():
 
     $('.wormholeChoiceButton').off('click.dynamicWormholeOnly').on('click.dynamicWormholeOnly', function(e) {
       e.preventDefault();
-      e.stopPropagation();
+      e.stopImmediatePropagation();
 
       var actionName = $(this).data('action');
       $('#wormholePickerDialog').dialog('close');
