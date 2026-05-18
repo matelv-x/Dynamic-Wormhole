@@ -32,7 +32,7 @@ Copy the ZIP/repo folder to your Raspberry Pi, then run:
 
 ```bash
 cd /home/pi
-unzip dynamic_wormhole_only_with_config_patch.zip
+unzip dynamic_wormhole.zip
 cd dynamic_wormhole_only_with_config_patch
 sudo ./install.sh /home/pi/sg1_v4
 sudo systemctl restart stargate.service
