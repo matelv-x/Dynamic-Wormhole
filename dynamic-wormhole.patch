@@ -1,0 +1,2139 @@
+diff -ruN original/classes/StargateMilkyWay/wormhole_manager.py upgraded/classes/StargateMilkyWay/wormhole_manager.py
+--- original/classes/StargateMilkyWay/wormhole_manager.py	2026-05-14 20:20:25
++++ upgraded/classes/StargateMilkyWay/wormhole_manager.py	2026-05-14 23:23:09
+@@ -1,137 +1,171 @@
+-from time import sleep, time
+-from datetime import timedelta
+-from pathlib import Path
+-import math
+-
+-from wormhole_animation_manager import WormholeAnimationManager
+-
+-class WormholeManager:
+-    """
+-    This class handles all things wormhole. It takes the stargate object as input.
+-    """
+-    def __init__(self, stargate):
+-
+-        # For convenience
+-        self.stargate = stargate
+-        self.log = stargate.log
+-        self.cfg = stargate.cfg
+-        self.audio = stargate.app.audio
+-        self.electronics = stargate.electronics
+-
+-        # Initialize the NeoPixel strip and the WormholePatternManager
+-        self.pixels = self.electronics.get_wormhole_pixels()
+-        self.tot_leds = self.electronics.get_wormhole_pixel_count()
+-        self.animation_manager = WormholeAnimationManager(stargate)
+-
+-        self.root_path = Path(__file__).parent.absolute()
+-
+-        # Retrieve the configurations
+-        self.wormhole_max_time_default = self.cfg.get("wormhole_max_time_minutes") * 60  # A wormhole can only be maintained for about 38 minutes without tremendous amounts of power. (Black hole)
+-        self.wormhole_max_time_blackhole = self.cfg.get("wormhole_max_time_blackhole") * 60   # Make it 10 years...
+-        self.audio_play_random_clips = self.cfg.get("audio_play_random_clips")  # True to play random clips while WH established
+-        self.audio_clip_wait_time_default = self.cfg.get("audio_wormhole_active_quotes_interval")  # The frequency of the random audio clips.
+-        self.audio_clip_wait_time_blackhole = self.cfg.get("audio_clip_wait_time_blackhole")
+-        self.audio_wormhole_close_headstart = self.cfg.get("audio_wormhole_close_headstart") # How early should we start playing the "wormhole close" sound clip before running the hardware close procedure
+-
+-        # Load some state variables
+-        self.audio_clip_wait_time = self.audio_clip_wait_time_default
+-        self.wormhole_max_time = self.wormhole_max_time_default
+-
+-        self.open_time = None
+-
+-    def initialize_animation_manager(self):
+-        self.animation_manager.after_init(self)
+-
+-    def open_wormhole(self):
+-        """
+-        Method for opening the wormhole. For some reason i did not use the fade_transition function here..
+-        :return: Nothing is returned.
+-        """
+-        self.audio.sound_start('wormhole_open')  # Open wormhole audio
+-        self.animation_manager.animate_kawoosh()
+-
+-    def close_wormhole(self):
+-        """
+-        Method to disengage the wormhole
+-        :return: Nothing is returned
+-        """
+-
+-        def pattern_blue(number_of_leds):
+-            blue_pattern = []
+-            for index in range(number_of_leds): # pylint: disable=unused-variable
+-                blue_pattern.append((81, 110, 158))
+-            return blue_pattern
+-
+-        no_pattern = self.animation_manager.pattern_manager.pattern_off()
+-
+-        self.stargate.wormhole_active = True  # temporarily to be able to use the fade_transition function
+-        self.animation_manager.fade_transition(pattern_blue(self.tot_leds))
+-        self.audio.sound_start('wormhole_close')  # Play the close wormhole audio
+-        sleep(self.audio_wormhole_close_headstart)
+-        self.animation_manager.fade_transition(no_pattern)
+-
+-        # Reset some state variables
+-        self.stargate.wormhole_max_time = self.wormhole_max_time_default # Reset the variable
+-        self.stargate.audio_clip_wait_time = self.audio_clip_wait_time_default # Reset the variable
+-        self.stargate.wormhole_active = False  # Put it back the way it should be.
+-
+-    def get_time_remaining(self):
+-        if self.open_time:
+-            time_elapsed = time() - self.open_time
+-            return math.floor(self.wormhole_max_time - time_elapsed)
+-        return 0
+-
+-    def establish_wormhole(self):
+-        """
+-        This is the main method in the wormhole class that opens and maintains a wormhole
+-        :return: Nothing is returned.
+-        """
+-
+-        # Open The wormhole
+-        self.log.log('Opening Wormhole!')
+-        self.open_wormhole()
+-
+-        # this will play the worm hole active audio. It lasts about 4min 22sec. It is deliberately not looping or restarting.
+-        self.audio.sound_start('wormhole_established')
+-
+-        self.open_time = time()
+-        random_audio_start_time = self.open_time
+-
+-        # Assume we did not dial a black hole
+-        audio_group = "audio_clips"
+-
+-        # If we dialed the black hole planet, change some variables
+-        if self.stargate.black_hole:  # If we dialed the black hole.
+-            self.wormhole_max_time = self.wormhole_max_time_blackhole * 60  # Make it 10 years...
+-            self.audio_clip_wait_time = self.audio_clip_wait_time_blackhole
+-            audio_group = "audio_clips/black_hole"
+-
+-        # Keep the wormhole open
+-        while self.stargate.wormhole_active and self.get_time_remaining() > 0:  # as long as stargate.wormhole_active, but for less time than the wormhole_max_time.
+-
+-            # TODO: These take a long time, and as a result we don't have tight timing
+-            # on wormhole close/timeout, and the random clips.
+-            #    Maybe the Neopixel stuff should run in it's own thread?
+-
+-            # Change the patterns/animations around with transitions
+-            self.animation_manager.do_random_transitions(self.stargate.black_hole)
+-
+-            # Play random audio clips if wormhole not closing
+-            if self.audio_play_random_clips and self.stargate.wormhole_active and (time() - random_audio_start_time) > self.audio_clip_wait_time:  # If there has been "silence" for more than audio_clip_wait_time
+-                self.audio.play_random_clip(audio_group) # Won't play if a clip is already playing
+-                random_audio_start_time = time()
+-
+-        # Wormhole is closing. Did it close because it ran out of power/time?
+-        if self.get_time_remaining() < 1:  # if the wormhole closes due to the 38min time limit.
+-            if self.audio.random_clip_is_playing():  # If the random audio clip is still playing:
+-                self.audio.random_clip_wait_done()  # wait until it's finished.
+-
+-            self.audio.play_random_clip("38min")  # The 38min ones.
+-            self.audio.random_clip_wait_done()  # wait until it's finished.
+-
+-        self.close_wormhole()
+-        if self.audio.is_playing('wormhole_established'):
+-            self.audio.sound_stop('wormhole_established')
+-        self.stargate.wormhole_active = False # The close_wormhole method also does this.. shouldn't be needed.
+-        self.log.log(f'Disengaged Wormhole after {timedelta(seconds=int(time() - self.open_time))}')
+-        self.open_time = None
++from time import sleep, time
++from datetime import timedelta
++from pathlib import Path
++import math
++
++from wormhole_animation_manager import WormholeAnimationManager
++
++
++class WormholeManager:
++    """
++    This class handles all things wormhole. It takes the stargate object as input.
++    """
++    def __init__(self, stargate):
++
++        self.stargate = stargate
++        self.log = stargate.log
++        self.cfg = stargate.cfg
++        self.audio = stargate.app.audio
++        self.electronics = stargate.electronics
++
++        self.pixels = self.electronics.get_wormhole_pixels()
++        self.tot_leds = self.electronics.get_wormhole_pixel_count()
++        self.animation_manager = WormholeAnimationManager(stargate)
++
++        self.root_path = Path(__file__).parent.absolute()
++
++        self.wormhole_max_time_default = self.cfg.get("wormhole_max_time_minutes") * 60
++        self.wormhole_max_time_blackhole = self.cfg.get("wormhole_max_time_blackhole") * 60
++        self.audio_play_random_clips = self.cfg.get("audio_play_random_clips")
++        self.audio_clip_wait_time_default = self.cfg.get("audio_wormhole_active_quotes_interval")
++        self.audio_clip_wait_time_blackhole = self.cfg.get("audio_clip_wait_time_blackhole")
++        self.audio_wormhole_close_headstart = self.cfg.get("audio_wormhole_close_headstart")
++        self.use_dynamic_wormhole = self.cfg.get("use_dynamic_wormhole")
++        self.use_dynamic_wormhole_for_incoming = self.cfg.get("use_dynamic_wormhole_for_incoming")
++
++        self.audio_clip_wait_time = self.audio_clip_wait_time_default
++        self.wormhole_max_time = self.wormhole_max_time_default
++
++        self.open_time = None
++
++    def initialize_animation_manager(self):
++        self.animation_manager.after_init(self)
++
++    def open_wormhole(self):
++        """
++        Normal wormhole uses original kawoosh.
++        Black hole skips white kawoosh.
++        """
++        self.audio.sound_start('wormhole_open')
++
++        if not self.stargate.black_hole:
++            self.animation_manager.animate_kawoosh()
++
++    def close_wormhole(self):
++        """
++        Disengage wormhole.
++        """
++
++        def pattern_blue(number_of_leds):
++            blue_pattern = []
++            for index in range(number_of_leds):  # pylint: disable=unused-variable
++                blue_pattern.append((81, 110, 158))
++            return blue_pattern
++
++        no_pattern = self.animation_manager.pattern_manager.pattern_off()
++
++        self.stargate.wormhole_active = True
++        self.animation_manager.fade_transition(pattern_blue(self.tot_leds))
++        self.audio.sound_start('wormhole_close')
++        sleep(self.audio_wormhole_close_headstart)
++        self.animation_manager.fade_transition(no_pattern)
++
++        self.animation_manager.pattern_manager.stop_dynamic_wormhole()
++
++        self.stargate.wormhole_max_time = self.wormhole_max_time_default
++        self.stargate.audio_clip_wait_time = self.audio_clip_wait_time_default
++        self.stargate.manual_dynamic_override = None
++        self.stargate.wormhole_active = False
++
++    def get_time_remaining(self):
++        if self.open_time:
++            time_elapsed = time() - self.open_time
++            return math.floor(self.wormhole_max_time - time_elapsed)
++        return 0
++
++    def establish_wormhole(self):
++        """
++        Main method that opens and maintains a wormhole.
++        """
++
++        # Runtime test override:
++        # True  = force dynamic for this one test
++        # False = force static for this one test
++        # None  = use checkbox/config value
++        manual_override = getattr(self.stargate, "manual_dynamic_override", None)
++
++        incoming_dynamic_enabled = (
++            self.stargate.wormhole_active == "incoming"
++            and bool(self.cfg.get("use_dynamic_wormhole_for_incoming"))
++        )
++
++        if manual_override is True:
++            self.use_dynamic_wormhole = True
++        elif manual_override is False:
++            self.use_dynamic_wormhole = False
++        else:
++            self.use_dynamic_wormhole = bool(self.cfg.get("use_dynamic_wormhole")) or incoming_dynamic_enabled
++
++        self.log.log(
++            f'Opening Wormhole! black_hole={self.stargate.black_hole}, dynamic={self.use_dynamic_wormhole}'
++        )
++
++        self.open_wormhole()
++        self.audio.sound_start('wormhole_established')
++
++        self.open_time = time()
++        random_audio_start_time = self.open_time
++
++        audio_group = "audio_clips"
++
++        if self.stargate.black_hole:
++            self.wormhole_max_time = self.wormhole_max_time_blackhole * 60
++            self.audio_clip_wait_time = self.audio_clip_wait_time_blackhole
++            audio_group = "audio_clips/black_hole"
++        else:
++            self.wormhole_max_time = self.wormhole_max_time_default
++            self.audio_clip_wait_time = self.audio_clip_wait_time_default
++
++        if self.use_dynamic_wormhole:
++            if self.stargate.black_hole:
++                self.animation_manager.pattern_manager.start_dynamic_black_hole()
++            else:
++                self.animation_manager.pattern_manager.start_dynamic_wormhole()
++
++        while self.stargate.wormhole_active and self.get_time_remaining() > 0:
++
++            if self.use_dynamic_wormhole:
++                if self.stargate.black_hole:
++                    dynamic_pattern = self.animation_manager.pattern_manager.dynamic_black_hole_step()
++                else:
++                    dynamic_pattern = self.animation_manager.pattern_manager.dynamic_wormhole_step()
++
++                self.animation_manager.set_wormhole_pattern(dynamic_pattern)
++                sleep(0.01)
++
++            else:
++                self.animation_manager.do_random_transitions(self.stargate.black_hole)
++
++            if (
++                self.audio_play_random_clips
++                and self.stargate.wormhole_active
++                and (time() - random_audio_start_time) > self.audio_clip_wait_time
++            ):
++                self.audio.play_random_clip(audio_group)
++                random_audio_start_time = time()
++
++        if self.get_time_remaining() < 1:
++            if self.audio.random_clip_is_playing():
++                self.audio.random_clip_wait_done()
++
++            self.audio.play_random_clip("38min")
++            self.audio.random_clip_wait_done()
++
++        self.close_wormhole()
++
++        if self.audio.is_playing('wormhole_established'):
++            self.audio.sound_stop('wormhole_established')
++
++        self.stargate.wormhole_active = False
++        self.log.log(f'Disengaged Wormhole after {timedelta(seconds=int(time() - self.open_time))}')
++        self.open_time = None
+diff -ruN original/classes/StargateMilkyWay/wormhole_pattern_manager.py upgraded/classes/StargateMilkyWay/wormhole_pattern_manager.py
+--- original/classes/StargateMilkyWay/wormhole_pattern_manager.py	2026-05-14 20:20:25
++++ upgraded/classes/StargateMilkyWay/wormhole_pattern_manager.py	2026-05-04 01:48:42
+@@ -1,3 +1,7 @@
++import random
++import time
++
++
+ class WormholePatternManager:
+ 
+     def __init__(self, tot_leds):
+@@ -6,25 +10,21 @@
+         self.standard_patterns = []
+         self.black_hole_patterns = []
+ 
++        # Dynamic wormhole / black hole state
++        # [active, brightness, fade_direction, hue/color_index]
++        self.wormhole_array = None
++        self.wormhole_start_time = None
++        self.last_random_ms = 0
++
+         self.init_patterns()
+ 
+     def pattern_off(self):
+-        """
+-        This helper method creates an empty pattern (no leds active)
+-        :return: the pattern is returned as a list
+-        """
+         off_pattern = []
+-        for index in range(self.tot_leds): # pylint: disable=unused-variable
++        for index in range(self.tot_leds):  # pylint: disable=unused-variable
+             off_pattern.append((0, 0, 0))
+         return off_pattern
+ 
+     def pattern1(self, color1, color2):
+-        """
+-        This method creates the wormhole pattern1
+-        :param color1: the first color as a tuple of rgb values, eg: (26, 56, 105)
+-        :param color2: the second color as a tuple of rgb values, eg: (26, 56, 105)
+-        :return: A list containing the led colors for the wormhole is returned.
+-        """
+         pattern = []
+         for led in range(self.tot_leds):
+             pattern.append(color1)
+@@ -34,12 +34,6 @@
+         return pattern
+ 
+     def pattern2(self, base_color, size):
+-        """
+-        This method creates the wormhole pattern2
+-        :param base_color: The base color for the pattern
+-        :param size: the size of the spacing in the pattern. Should be an int between 5, and 15 should be fine.
+-        :return: A list is returned.
+-        """
+         pattern = []
+         second_color = ((base_color[0] + 5) % 255, (base_color[1] + 5) % 255, (base_color[2] - 190) % 255)
+         third_color = ((base_color[0] + 5) % 255, (base_color[1] + 200) % 255, (base_color[2] // 2) % 255)
+@@ -53,18 +47,11 @@
+             pattern[(led - 2) % self.tot_leds] = third_color
+         return pattern
+ 
+-    def pattern3( self, base_color, size):
+-        """
+-        This method creates the wormhole pattern3
+-        :param base_color: The base color for the pattern
+-        :param size: the size of the spacing in the pattern. 10 seems fine.
+-        :return: A list is returned.
+-        """
++    def pattern3(self, base_color, size):
+         pattern = []
+         for led in range(self.tot_leds):
+             pattern.append(base_color)
+         for led in range(0, self.tot_leds, size):
+-            # pattern[led] = (base_color[0//2], base_color[1]//2, base_color[2]//2)
+             pattern[(led - 1) % self.tot_leds] = (base_color[0] // 2, base_color[1] // 2, base_color[2] // 2)
+             pattern[(led - 2) % self.tot_leds] = (base_color[0] // 3, base_color[1] // 3, base_color[2] // 3)
+             pattern[(led - 3) % self.tot_leds] = (base_color[0] // 4, base_color[1] // 4, base_color[2] // 4)
+@@ -88,26 +75,218 @@
+         return self.black_hole_patterns
+ 
+     def init_patterns(self):
+-        #pylint: disable=too-many-function-args
+         self.standard_patterns = [
+-                            self.pattern1((26, 56, 105), (5, 37, 247)),
+-                            self.pattern1((2, 172, 207), (5, 46, 250)),
+-                            self.pattern1((56, 25, 252), (97, 184, 255)),
+-                            self.pattern2((0, 0, 200), 12),
+-                            self.pattern2((0, 10, 255), 8),
+-                            self.pattern2((10, 20, 200), 15),
+-                            self.pattern3((10, 10, 255), 10),
+-                            self.pattern3((64, 229, 247), 11),
+-                            self.pattern3((22, 83, 102), 15),
+-                            self.pattern3((0, 49, 133), 16),
+-                            self.pattern3((47, 0, 255), 9),
+-                            self.pattern3((0, 26, 74), 12),
+-                            self.pattern3((20, 26, 74), 15)]
++            self.pattern1((26, 56, 105), (5, 37, 247)),
++            self.pattern1((2, 172, 207), (5, 46, 250)),
++            self.pattern1((56, 25, 252), (97, 184, 255)),
++            self.pattern2((0, 0, 200), 12),
++            self.pattern2((0, 10, 255), 8),
++            self.pattern2((10, 20, 200), 15),
++            self.pattern3((10, 10, 255), 10),
++            self.pattern3((64, 229, 247), 11),
++            self.pattern3((22, 83, 102), 15),
++            self.pattern3((0, 49, 133), 16),
++            self.pattern3((47, 0, 255), 9),
++            self.pattern3((0, 26, 74), 12),
++            self.pattern3((20, 26, 74), 15)
++        ]
+ 
+         self.black_hole_patterns = [
+-                            self.pattern3((255, 10, 59), 10),
+-                            self.pattern3((247, 64, 95), 11),
+-                            self.pattern3((102, 22, 35), 15),
+-                            self.pattern3((133, 0, 22), 16),
+-                            self.pattern3((255, 0, 85), 9),
+-                            self.pattern3((74, 0, 15), 12)]
++            self.pattern3((127, 5, 29), 10),
++            self.pattern3((123, 32, 47), 11),
++            self.pattern3((15, 3, 5), 15),
++            self.pattern3((19, 0, 3), 16),
++            self.pattern3((127, 0, 42), 9),
++            self.pattern3((11, 0, 2), 12)
++        ]
++
++    @staticmethod
++    def hsv_to_rgb(h, s, v):
++        if s == 0:
++            return (v, v, v)
++
++        h = h % 256
++        region = h // 43
++        remainder = (h - (region * 43)) * 6
++
++        p = (v * (255 - s)) >> 8
++        q = (v * (255 - ((s * remainder) >> 8))) >> 8
++        t = (v * (255 - ((s * (255 - remainder)) >> 8))) >> 8
++
++        if region == 0:
++            return (v, t, p)
++        if region == 1:
++            return (q, v, p)
++        if region == 2:
++            return (p, v, t)
++        if region == 3:
++            return (p, q, v)
++        if region == 4:
++            return (t, p, v)
++        return (v, p, q)
++
++    # ============================================================
++    # DYNAMIC WORMHOLE
++    # ============================================================
++
++    def start_dynamic_wormhole(self):
++        self.wormhole_start_time = int(time.time() * 1000)
++        self.last_random_ms = self.wormhole_start_time
++
++        self.wormhole_array = []
++        for _ in range(self.tot_leds):
++            self.wormhole_array.append([0, 255, 1, 0])
++
++    def stop_dynamic_wormhole(self):
++        self.wormhole_array = None
++        self.wormhole_start_time = None
++        self.last_random_ms = 0
++
++    def dynamic_wormhole_step(self):
++        if self.wormhole_array is None or self.wormhole_start_time is None:
++            self.start_dynamic_wormhole()
++
++        now_ms = int(time.time() * 1000)
++        wormhole_duration = now_ms - self.wormhole_start_time
++
++        if wormhole_duration < 1700:
++            wormhole_brightness = int((wormhole_duration / 1700.0) * 210)
++            if wormhole_brightness > 210:
++                wormhole_brightness = 210
++
++            pattern = []
++            for _ in range(self.tot_leds):
++                pattern.append((wormhole_brightness, wormhole_brightness, wormhole_brightness))
++            return pattern
++
++        if now_ms - self.last_random_ms >= 30:
++            self.last_random_ms = now_ms
++
++            random_led = random.randint(0, self.tot_leds - 1)
++
++            random_pick = random.randint(0, 99)
++            if random_pick < 50:
++                random_color = 100
++            elif random_pick < 85:
++                random_color = 130
++            else:
++                random_color = 160
++
++            if self.wormhole_array[random_led][0] == 0:
++                self.wormhole_array[random_led][0] = 1
++                self.wormhole_array[random_led][1] = 0
++                self.wormhole_array[random_led][2] = 1
++                self.wormhole_array[random_led][3] = random_color
++
++        pattern = []
++
++        for i in range(self.tot_leds):
++            if self.wormhole_array[i][0] == 1:
++                self.wormhole_array[i][1] = self.wormhole_array[i][1] + (8 * self.wormhole_array[i][2])
++
++                if self.wormhole_array[i][1] >= 255:
++                    self.wormhole_array[i][1] = 255
++                    self.wormhole_array[i][2] = -1
++
++                if self.wormhole_array[i][1] <= 0:
++                    self.wormhole_array[i][0] = 0
++                    self.wormhole_array[i][1] = 0
++                    self.wormhole_array[i][2] = 1
++                    pattern.append((0, 0, 0))
++                    continue
++
++                brightness = self.wormhole_array[i][1]
++
++                if self.wormhole_array[i][3] == 100:
++                    pattern.append((brightness, brightness, brightness))
++                else:
++                    pattern.append(self.hsv_to_rgb(self.wormhole_array[i][3], 255, brightness))
++            else:
++                pattern.append((0, 0, 0))
++
++        return pattern
++
++    # ============================================================
++    # DYNAMIC BLACK HOLE
++    # ============================================================
++
++    def start_dynamic_black_hole(self):
++        self.wormhole_start_time = int(time.time() * 1000)
++        self.last_random_ms = self.wormhole_start_time
++
++        self.wormhole_array = []
++        for _ in range(self.tot_leds):
++            self.wormhole_array.append([0, 0, 1, 0])
++
++    def stop_dynamic_black_hole(self):
++        self.wormhole_array = None
++        self.wormhole_start_time = None
++        self.last_random_ms = 0
++
++    def dynamic_black_hole_step(self):
++        if self.wormhole_array is None or self.wormhole_start_time is None:
++            self.start_dynamic_black_hole()
++
++        now_ms = int(time.time() * 1000)
++        wormhole_duration = now_ms - self.wormhole_start_time
++
++        black_hole_colors = [
++            (127, 5, 29),
++            (123, 32, 47),
++            (80, 0, 25),
++            (50, 0, 12),
++            (160, 0, 42),
++            (35, 0, 5)
++        ]
++
++        if wormhole_duration < 1700:
++            ramp = int((wormhole_duration / 1700.0) * 100)
++            if ramp > 100:
++                ramp = 100
++
++            pattern = []
++            for _ in range(self.tot_leds):
++                pattern.append((ramp, int(ramp * 0.03), int(ramp * 0.16)))
++            return pattern
++
++        if now_ms - self.last_random_ms >= 28:
++            self.last_random_ms = now_ms
++
++            random_led = random.randint(0, self.tot_leds - 1)
++            random_color = random.randint(0, len(black_hole_colors) - 1)
++
++            if self.wormhole_array[random_led][0] == 0:
++                self.wormhole_array[random_led][0] = 1
++                self.wormhole_array[random_led][1] = 0
++                self.wormhole_array[random_led][2] = 1
++                self.wormhole_array[random_led][3] = random_color
++
++        pattern = []
++
++        for i in range(self.tot_leds):
++            if self.wormhole_array[i][0] == 1:
++                self.wormhole_array[i][1] += 6 * self.wormhole_array[i][2]
++
++                if self.wormhole_array[i][1] >= 190:
++                    self.wormhole_array[i][1] = 190
++                    self.wormhole_array[i][2] = -1
++
++                if self.wormhole_array[i][1] <= 0:
++                    self.wormhole_array[i][0] = 0
++                    self.wormhole_array[i][1] = 0
++                    self.wormhole_array[i][2] = 1
++                    pattern.append((0, 0, 0))
++                    continue
++
++                brightness = self.wormhole_array[i][1]
++                base_color = black_hole_colors[self.wormhole_array[i][3]]
++
++                red = int((base_color[0] * brightness) / 255)
++                green = int((base_color[1] * brightness) / 255)
++                blue = int((base_color[2] * brightness) / 255)
++
++                pattern.append((red, green, blue))
++            else:
++                pattern.append((0, 0, 0))
++
++        return pattern
+\ No newline at end of file
+diff -ruN original/classes/web_server.py upgraded/classes/web_server.py
+--- original/classes/web_server.py	2026-05-14 20:20:25
++++ upgraded/classes/web_server.py	2026-05-04 02:32:26
+@@ -1,15 +1,19 @@
+ import os
+ import json
++import re
+ from time import sleep
+ import urllib.parse
+ import collections
+ import platform
++import random
++import time
+ from http.server import SimpleHTTPRequestHandler
+ 
++
+ class StargateWebServer(SimpleHTTPRequestHandler):
+ 
+-    #Overload SimpleHTTPRequestHandler.log_message() to suppress logs from printing to console
+-    def log_message(self, format, *args): # pylint: disable=redefined-builtin
++    # Overload SimpleHTTPRequestHandler.log_message() to suppress logs from printing to console
++    def log_message(self, format, *args):  # pylint: disable=redefined-builtin
+         if self.stargate.cfg.get("control_api_debug_enable"):
+             self.stargate.log.log(f'{self.client_address[0]} {str(args[0])}')
+ 
+@@ -19,18 +23,28 @@
+         if '?' in path:
+             path, tmp = path.split('?', 1)
+             query_string = urllib.parse.parse_qs(tmp)
++        if path.startswith('/stargate/'):
++            path = path[len('/stargate'):]
+         return path, query_string
+ 
+-    def do_GET(self): # pylint: disable=invalid-name
++    def do_GET(self):  # pylint: disable=invalid-name
+         try:
+             request_path, get_vars = self.parse_get_vars()
+ 
++            if request_path == "/dial":
++                target = self.get_home_dial_path()
++                query = urllib.parse.urlparse(self.path).query
++                self.send_response(302)
++                self.send_header("Location", target + ("?" + query if query else ""))
++                self.end_headers()
++                return
++
+             if request_path == "/get/is_alive":
+-                data = { 'is_alive': True }
++                data = {'is_alive': True}
+ 
+             elif request_path == "/get/address_book":
+                 data = {}
+-                record_type = get_vars.get('type')[0]
++                record_type = get_vars.get('type', ['all'])[0]
+                 if record_type == "standard":
+                     data['address_book'] = self.stargate.addr_manager.get_book().get_standard_gates()
+                 elif record_type == "fan":
+@@ -46,56 +60,73 @@
+                 data = self.stargate.addr_manager.get_book().get_local_address()
+ 
+             elif request_path == "/get/dialing_status":
++                incoming_visual_symbols = getattr(self.stargate, "incoming_visual_symbols", [])
++                extended_sequence_stage = getattr(self.stargate, "extended_sequence_stage", 0)
++                incoming_visual_locked_chevrons = self.stargate.locked_chevrons_incoming
++
++                if len(incoming_visual_symbols) > len(self.stargate.address_buffer_incoming):
++                    if extended_sequence_stage >= 2:
++                        incoming_visual_locked_chevrons += 1
++                    if extended_sequence_stage >= 3:
++                        incoming_visual_locked_chevrons += 1
++
++                    incoming_visual_locked_chevrons = min(
++                        incoming_visual_locked_chevrons,
++                        len(incoming_visual_symbols)
++                    )
++
+                 data = {
+-                    "gate_name":                self.stargate.addr_manager.get_book().get_local_gate_name(),
+-                    "local_address":            self.stargate.addr_manager.get_book().get_local_address(),
+-                    "address_buffer_outgoing":  self.stargate.address_buffer_outgoing,
++                    "gate_name": self.stargate.addr_manager.get_book().get_local_gate_name(),
++                    "local_address": self.stargate.addr_manager.get_book().get_local_address(),
++                    "address_buffer_outgoing": self.stargate.address_buffer_outgoing,
+                     "locked_chevrons_outgoing": self.stargate.locked_chevrons_outgoing,
+-                    "address_buffer_incoming":  self.stargate.address_buffer_incoming,
++                    "address_buffer_incoming": self.stargate.address_buffer_incoming,
+                     "locked_chevrons_incoming": self.stargate.locked_chevrons_incoming,
+-                    "wormhole_active":          self.stargate.wormhole_active,
+-                    "black_hole_connected":     self.stargate.black_hole,
+-                    "connected_planet":         self.stargate.connected_planet_name,
+-                    "wormhole_open_time":       self.stargate.wh_manager.open_time,
+-                    "wormhole_max_time":        self.stargate.wh_manager.wormhole_max_time,
++                    "incoming_visual_symbols": incoming_visual_symbols,
++                    "incoming_visual_locked_chevrons": incoming_visual_locked_chevrons,
++                    "extended_sequence_stage": extended_sequence_stage,
++                    "wormhole_active": self.stargate.wormhole_active,
++                    "black_hole_connected": self.stargate.black_hole,
++                    "connected_planet": self.stargate.connected_planet_name,
++                    "wormhole_open_time": self.stargate.wh_manager.open_time,
++                    "wormhole_max_time": self.stargate.wh_manager.wormhole_max_time,
+                     "wormhole_time_till_close": self.stargate.wh_manager.get_time_remaining(),
+-                    "ring_position":            self.stargate.ring.get_position(),
+-                    "speed_dial_full_address":  self.stargate.cfg.get('dialing_address_book_dials_full_address')
++                    "ring_position": self.stargate.ring.get_position(),
++                    "speed_dial_full_address": self.stargate.cfg.get('dialing_address_book_dials_full_address')
+                 }
+ 
+             elif request_path == "/get/system_info":
+                 data = {
+-                    "gate_name":                      self.stargate.addr_manager.get_book().get_local_gate_name(),
+-                    "local_stargate_address":         self.stargate.addr_manager.get_book().get_local_address(),
+-                    "local_stargate_address_string":  self.stargate.addr_manager.get_book().get_local_address_string(),
+-                    "subspace_public_key":            self.stargate.subspace_client.get_public_key(),
+-                    "subspace_ip_address_config":     self.stargate.subspace_client.get_configured_ip(),
+-                    "subspace_ip_address_active":     self.stargate.net_tools.get_subspace_ip(True),
+-                    "lan_ip_address":                 self.stargate.net_tools.get_ip_by_interface_list( [ 'wlan0', 'eth0', 'en0', 'en1' ] ),
+-                    "software_version":               str(self.stargate.sw_updater.get_current_version()),
+-                    "software_update_last_check":     self.stargate.cfg.get('software_update_last_check'),
+-                    "software_update_status":         self.stargate.cfg.get('software_update_status'),
+-                    "python_version":                 platform.python_version(),
+-                    "internet_available":             self.stargate.net_tools.has_internet_access(),
+-                    "subspace_available":             self.stargate.subspace_client.is_online(),
+-                    "standard_gate_count":            len(self.stargate.addr_manager.get_book().get_standard_gates()),
+-                    "fan_gate_count":                 len(self.stargate.addr_manager.get_book().get_fan_gates()),
+-                    "lan_gate_count":                 len(self.stargate.addr_manager.get_book().get_lan_gates()),
+-                    "fan_gate_last_update":           self.stargate.cfg.get('fan_gate_last_update'),
+-                    "dialer_mode":                    self.stargate.dialer.type,
+-                    "hardware_mode":                  self.stargate.electronics.name,
+-                    "audio_volume":                   self.stargate.audio.volume,
+-                    "galaxy":                         self.stargate.galaxy
++                    "gate_name": self.stargate.addr_manager.get_book().get_local_gate_name(),
++                    "local_stargate_address": self.stargate.addr_manager.get_book().get_local_address(),
++                    "local_stargate_address_string": self.stargate.addr_manager.get_book().get_local_address_string(),
++                    "subspace_public_key": self.stargate.subspace_client.get_public_key(),
++                    "subspace_ip_address_config": self.stargate.subspace_client.get_configured_ip(),
++                    "subspace_ip_address_active": self.stargate.net_tools.get_subspace_ip(True),
++                    "lan_ip_address": self.stargate.net_tools.get_ip_by_interface_list(['wlan0', 'eth0', 'en0', 'en1']),
++                    "software_version": str(self.stargate.sw_updater.get_current_version()),
++                    "software_update_last_check": self.stargate.cfg.get('software_update_last_check'),
++                    "software_update_status": self.stargate.cfg.get('software_update_status'),
++                    "python_version": platform.python_version(),
++                    "internet_available": self.stargate.net_tools.has_internet_access(),
++                    "subspace_available": self.stargate.subspace_client.is_online(),
++                    "standard_gate_count": len(self.stargate.addr_manager.get_book().get_standard_gates()),
++                    "fan_gate_count": len(self.stargate.addr_manager.get_book().get_fan_gates()),
++                    "lan_gate_count": len(self.stargate.addr_manager.get_book().get_lan_gates()),
++                    "fan_gate_last_update": self.stargate.cfg.get('fan_gate_last_update'),
++                    "dialer_mode": self.stargate.dialer.type,
++                    "hardware_mode": self.stargate.electronics.name,
++                    "audio_volume": self.stargate.audio.volume,
++                    "galaxy": self.stargate.galaxy
+                 }
+ 
+-                # Put the lifetime stats in here too.
+                 for key, value in self.stargate.dialing_log.get_summary().items():
+-                    data['stats_'+key] = value.get('value')
++                    data['stats_' + key] = value.get('value')
+ 
+             elif request_path == "/get/hardware_status":
+                 data = {
+-                    "chevrons":                       self.stargate.chevrons.get_status(),
+-                    "glyph_ring":                     self.stargate.ring.get_status()
++                    "chevrons": self.stargate.chevrons.get_status(),
++                    "glyph_ring": self.stargate.ring.get_status()
+                 }
+ 
+             elif request_path == "/get/dhd_symbols":
+@@ -109,6 +140,23 @@
+             elif request_path == "/get/symbols_all":
+                 data = self.stargate.symbol_manager.get_all()
+ 
++            elif request_path == "/get/alarm_clock":
++                data = self.stargate.alarm_clock.get_alarm_data()
++
++            elif request_path == "/get/alarm_audio_files":
++                data = {
++                    "files": self.stargate.alarm_clock.list_audio_files()
++                }
++
++            elif request_path == "/get/dialing_history":
++                data = {
++                    "history": self.stargate.dialing_log.get_history(),
++                    "summary": {
++                        key: value.get("value")
++                        for key, value in self.stargate.dialing_log.get_summary().items()
++                    }
++                }
++
+             elif request_path == "/get/config":
+                 data = collections.OrderedDict(sorted(self.stargate.cfg.get_all_configs().items()))
+ 
+@@ -116,42 +164,37 @@
+                 data = self.stargate.audio.list_clips()
+ 
+             else:
+-                # Unhandled GET request: send a 404
+                 self.send_response(404, 'Not Found')
+                 self.end_headers()
+                 return
+ 
+-            content = json.dumps( data )
++            content = json.dumps(data)
+             self.send_response(200, 'OK')
+-            self.send_header("Content-type", "text/json")
++            self.send_header("Content-type", "application/json")
+             self.send_header("Access-Control-Allow-Origin", "*")
+             self.send_header("Access-Control-Allow-Headers", 'Authorization, Content-Type')
+             self.send_header("Access-Control-Allow-Methods", 'GET')
+             self.end_headers()
+             self.wfile.write(content.encode())
+ 
+-        except: # pylint: disable=bare-except
++        except:  # pylint: disable=bare-except
+             if self.stargate.cfg.get("control_api_debug_enable"):
+                 raise
+ 
+-            # Encountered an exception: send a 500
+             self.send_response(500, "Exception")
+             self.end_headers()
+ 
+-    def do_POST(self): # pylint: disable=invalid-name
++    def do_POST(self):  # pylint: disable=invalid-name
+         try:
+-            #print('POST PATH: {}'.format(self.path))
+-
++            if self.path.startswith('/stargate/'):
++                self.path = self.path[len('/stargate'):]
+             content_len = int(self.headers.get('content-length', 0))
+             body = self.rfile.read(content_len)
+             try:
+                 data = json.loads(body)
+-            except: # pylint: disable=bare-except
++            except:  # pylint: disable=bare-except
+                 data = {}
+ 
+-            #print('POST DATA: {}'.format(data))
+-
+-            ##### DO ACTION HANDLERS BELOW ####
+             if self.path == '/do/shutdown':
+                 self.stargate.wormhole_active = False
+                 sleep(5)
+@@ -178,70 +221,194 @@
+                 self.stargate.wormhole_active = False
+                 sleep(5)
+                 self.send_response(200, 'OK')
++                self.end_headers()
+                 os.system('systemctl restart stargate.service')
+                 return
+ 
+             if self.path == "/do/chevron_cycle":
+                 self.stargate.chevrons.get(int(data['chevron_number'])).cycle_outgoing()
+-                data = { "success": True }
++                data = {"success": True}
+ 
+             elif self.path == "/do/all_chevron_leds_off":
+                 self.stargate.chevrons.all_off()
+                 self.stargate.wormhole_active = False
+-                data = { "success": True }
++                data = {"success": True}
+ 
+             elif self.path == "/do/all_chevron_leds_on":
+                 self.stargate.chevrons.all_lights_on()
+-                data = { "success": True }
++                data = {"success": True}
+ 
++            elif self.path == "/do/white_on":
++                try:
++                    cal_led = self.stargate.electronics.get_calibration_led()
++                    if cal_led:
++                        cal_led.on()
++                        data = {"success": True}
++                    else:
++                        self.stargate.log.log("WHITE_ON ERROR: calibration_led is None")
++                        data = {"success": False}
++                except Exception as exc:
++                    self.stargate.log.log(f"WHITE_ON ERROR: {exc}")
++                    data = {"success": False}
++
++            elif self.path == "/do/white_off":
++                try:
++                    cal_led = self.stargate.electronics.get_calibration_led()
++                    if cal_led:
++                        cal_led.off()
++                        data = {"success": True}
++                    else:
++                        self.stargate.log.log("WHITE_OFF ERROR: calibration_led is None")
++                        data = {"success": False}
++                except Exception as exc:
++                    self.stargate.log.log(f"WHITE_OFF ERROR: {exc}")
++                    data = {"success": False}
++
+             elif self.path == "/do/wormhole_on":
+                 if not self.stargate.wormhole_active:
++                    self.stargate.black_hole = False
++                    self.stargate.manual_dynamic_override = False
+                     self.stargate.wormhole_active = True
+-                    data = { "success": True }
++                    data = {"success": True}
+                 else:
+-                    data = { "success": False, "message": "A wormhole is already established." }
++                    data = {"success": False, "message": "A wormhole is already established."}
+ 
++            elif self.path == "/do/dynamic_wormhole_on":
++                if not self.stargate.wormhole_active:
++                    self.stargate.black_hole = False
++                    self.stargate.manual_dynamic_override = True
++                    self.stargate.wormhole_active = True
++                    data = {"success": True}
++                else:
++                    data = {"success": False, "message": "A wormhole is already established."}
++
++            elif self.path == "/do/blackhole_on":
++                if not self.stargate.wormhole_active:
++                    self.stargate.black_hole = True
++                    self.stargate.manual_dynamic_override = None
++                    self.stargate.wormhole_active = True
++                    data = {"success": True}
++                else:
++                    data = {"success": False, "message": "A wormhole is already established."}
++
+             elif self.path == "/do/wormhole_off":
++                self.stargate.black_hole = False
+                 self.stargate.wormhole_active = False
+-                data = { "success": True }
++                data = {"success": True}
+ 
++            elif self.path == "/do/dhd_on":
++                try:
++                    dhd = getattr(self.stargate.dialer, "hardware", None)
++                    dhd_type = getattr(self.stargate.dialer, "type", "Unknown")
++
++                    if dhd is None or dhd_type != "DHDv2":
++                        self.stargate.log.log(f"DHD ON: DHD not active (type={dhd_type})")
++                        data = {
++                            "success": False,
++                            "message": "DHDv2 not connected"
++                        }
++                    else:
++                        target_brightness = int(255 * 0.60)
++                        dhd.set_brightness_center(target_brightness)
++                        dhd.set_brightness_symbols(target_brightness)
++
++                        center_color = (255, 0, 0)
++                        ring_color = (255, 50, 0)
++
++                        dhd.clear_all_pixels()
++                        dhd.set_color_center(center_color)
++                        dhd.set_color_symbols(ring_color)
++                        dhd.set_all_pixels_to_color(*ring_color)
++                        dhd.set_center_on()
++                        dhd.latch()
++
++                        self.stargate.log.log(
++                            f"DHD ON: center={center_color}, ring={ring_color}, brightness={target_brightness}"
++                        )
++                        data = {"success": True}
++
++                except Exception as exc:
++                    self.stargate.log.log(f"DHD ON ERROR: {exc}")
++                    data = {"success": False, "message": str(exc)}
++
++            elif self.path == "/do/dhd_off":
++                try:
++                    dhd = getattr(self.stargate.dialer, "hardware", None)
++                    dhd_type = getattr(self.stargate.dialer, "type", "Unknown")
++
++                    if dhd is None or dhd_type != "DHDv2":
++                        self.stargate.log.log(f"DHD OFF: DHD not active (type={dhd_type})")
++                        data = {
++                            "success": False,
++                            "message": "DHDv2 not connected"
++                        }
++                    else:
++                        dhd.clear_all_pixels()
++                        dhd.latch()
++                        self.stargate.log.log("DHD OFF: LEDs cleared")
++                        data = {"success": True}
++
++                except Exception as exc:
++                    self.stargate.log.log(f"DHD OFF ERROR: {exc}")
++                    data = {"success": False, "message": str(exc)}
++
+             elif self.path == "/do/symbol_forward":
+-                self.stargate.ring.move( 33, self.stargate.ring.forward_direction ) # Steps, Direction
++                self.stargate.ring.move(33, self.stargate.ring.forward_direction)
+                 self.stargate.ring.release()
+-                data = { "success": True }
++                data = {"success": True}
+ 
+             elif self.path == "/do/symbol_backward":
+-                self.stargate.ring.move( 33, self.stargate.ring.backward_direction ) # Steps, Direction
++                self.stargate.ring.move(33, self.stargate.ring.backward_direction)
+                 self.stargate.ring.release()
+-                data = { "success": True }
++                data = {"success": True}
+ 
+             elif self.path == "/do/volume_down":
+                 self.stargate.audio.volume_down()
+-                data = { "success": True }
++                data = {"success": True}
+ 
+             elif self.path == "/do/volume_up":
+                 self.stargate.audio.volume_up()
+-                data = { "success": True }
++                data = {"success": True}
+ 
+             elif self.path == "/do/simulate_incoming":
+-                if not self.stargate.wormhole_active: # If we don't already have an established wormhole
+-                    # Get the loopback address and dial it
++                if getattr(self.stargate, "wormhole_active", False):
++                    data = {"success": False, "message": "A wormhole is already established."}
++                else:
++                    payload = data if isinstance(data, dict) else {}
++                    extended = bool(payload.get("extended", False))
++
++                    self.stargate.extended_mode = extended
++
++                    self.stargate.incoming_visual_symbols = []
++                    self.stargate.random_dhd_symbols = []
++                    self.stargate.random_dhd_index = 0
++                    self.stargate.random_dhd_active = False
++                    self.stargate.random_dhd_last_time = 0
++                    self.stargate.random_dhd_center_pending = False
++                    self.stargate.extended_sequence_stage = 0
++                    self.stargate.extended_sequence_last_time = 0
++
++                    self.stargate.address_buffer_incoming = []
++                    self.stargate.locked_chevrons_incoming = 0
++
+                     for symbol_number in self.stargate.addr_manager.get_book().get_local_loopback_address():
+                         self.stargate.address_buffer_incoming.append(symbol_number)
+ 
+-                    self.stargate.address_buffer_incoming.append(7) # Point of origin
++                    self.stargate.address_buffer_incoming.append(7)
+                     self.stargate.centre_button_incoming = True
+-                    data = { "success": True }
+-                else:
+-                    data = { "success": False, "message": "A wormhole is already established." }
+ 
++                    data = {
++                        "success": True,
++                        "mode": "extended" if extended else "original"
++                    }
++
+             elif self.path == "/do/subspace_up":
+                 print("Subspace UP")
+-                data = { "success": False, "message": "API NOT IMPLEMENTED" }
++                data = {"success": False, "message": "API NOT IMPLEMENTED"}
+ 
+             elif self.path == "/do/subspace_down":
+                 print("Subspace DOWN")
+-                data = { "success": False, "message": "API NOT IMPLEMENTED" }
++                data = {"success": False, "message": "API NOT IMPLEMENTED"}
+ 
+             elif self.path == "/do/dhd_press":
+                 symbol_number = int(data['symbol'])
+@@ -251,110 +418,154 @@
+                 elif symbol_number == 0:
+                     self.stargate.keyboard.queue_center_button()
+                 elif symbol_number == -1 and self.stargate.wormhole_active is False and len(self.stargate.address_buffer_outgoing) > 0:
+-                    # Abort dialing
+                     self.stargate.dialing_log.dialing_fail(self.stargate.address_buffer_outgoing)
+                     self.stargate.shutdown(cancel_sound=False, wormhole_fail_sound=False)
+ 
+-                data = { "success": True }
++                data = {"success": True}
+ 
+             elif self.path == "/do/clear_outgoing_buffer":
+                 self.stargate.shutdown(cancel_sound=False, wormhole_fail_sound=False)
+-                data = { "success": True }
++                data = {"success": True}
+ 
+             elif self.path == "/do/set_glyph_ring_zero":
+                 self.stargate.ring.zero_position()
+-                data = { "success": True }
++                data = {"success": True}
+ 
++            elif self.path == "/do/dhd_led_test":
++                try:
++                    dhd = getattr(self.stargate.dialer, "hardware", None)
++                    dhd_type = getattr(self.stargate.dialer, "type", "Unknown")
++
++                    if dhd is None or dhd_type != "DHDv2":
++                        self.stargate.log.log(f"DHD LED TEST: DHD not active (type={dhd_type})")
++                        data = {
++                            "success": False,
++                            "message": "DHDv2 not connected"
++                        }
++                    else:
++                        try:
++                            mode = data.get("mode", "full")
++                        except Exception:
++                            mode = "full"
++
++                        from test.dhd_test_from_config import dhd_led_test_backend
++                        import threading
++
++                        threading.Thread(
++                            target=dhd_led_test_backend.run_dhd_test,
++                            args=(dhd, self.stargate.log, mode),
++                            daemon=True
++                        ).start()
++
++                        data = {"success": True, "mode": mode}
++
++                except Exception as exc:
++                    self.stargate.log.log(f"DHD LED TEST ERROR: {exc}")
++                    data = {"success": False, "message": str(exc)}
++
+             elif self.path == "/do/dhd_test_enable":
+                 self.stargate.keyboard.enable_dhd_test(True)
+-                data = { "success": True }
++                data = {"success": True}
+ 
+             elif self.path == "/do/dhd_test_disable":
+                 self.stargate.keyboard.enable_dhd_test(False)
+-                data = { "success": True }
++                data = {"success": True}
+ 
+             elif self.path == '/do/audio_play':
+                 try:
+                     clip = data['clip']
+                 except KeyError:
+-                    data = { "success": False, "error": "Required fields missing or invalid request" }
++                    data = {"success": False, "error": "Required fields missing or invalid request"}
+                     return
+ 
+                 try:
+-                    # Convert path into proper dictionary key
+                     clip_name = clip.replace('/', '_').split('.')[0]
+                     if clip_name[0] == '_':
+                         clip_name = clip_name[1:]
+ 
+-                    # Clip has not been initialized
+                     if clip_name not in self.stargate.audio.sounds:
+-                        self.stargate.audio.sounds[clip_name] = { 'file': self.stargate.audio.init_wav_file('/' + clip) }
++                        self.stargate.audio.sounds[clip_name] = {
++                            'file': self.stargate.audio.init_wav_file('/' + clip)
++                        }
+ 
+                     self.stargate.audio.sound_start(clip_name)
+-                except ValueError as ex:
+-                    data = { "success": False, "error": str(ex) }
++                except ValueError as exc:
++                    data = {"success": False, "error": str(exc)}
+                     return
+-                data = { "success": True }
+ 
++                data = {"success": True}
+ 
+-            ##### UPDATE DATA HANDLERS BELOW ####
+-            elif self.path == '/update/local_stargate_address':
++            elif self.path == '/do/test_alarm_clock':
++                data = self.stargate.alarm_clock.test_alarm(data.get('audio_file'))
+ 
++            elif self.path == '/do/stop_alarm_clock':
++                data = self.stargate.alarm_clock.stop_alarm()
++
++            elif self.path == '/update/alarm_clock':
++                try:
++                    alarm_data = self.stargate.alarm_clock.update_alarm(data)
++                    data = {
++                        "success": True,
++                        "message": "Alarm clock settings saved.",
++                        "alarm": alarm_data
++                    }
++                except Exception as exc:
++                    data = {"success": False, "message": str(exc)}
++
++            elif self.path == '/update/local_stargate_address':
+                 continue_to_save = True
+-                # Parse the address
+                 try:
+-                    address = [ data['S1'], data['S2'], data['S3'], data['S4'], data['S5'], data['S6'] ]
++                    address = [data['S1'], data['S2'], data['S3'], data['S4'], data['S5'], data['S6']]
+                 except KeyError:
+-                    data = { "success": False, "error": "Required fields missing or invalid request" }
++                    data = {"success": False, "error": "Required fields missing or invalid request"}
+                     continue_to_save = False
+ 
+-                # Validate that this is an acceptable address
+                 if continue_to_save:
+-                    verify_avail, error, entry = self.stargate.addr_manager.verify_address_available(address) # pylint: disable=unused-variable
++                    verify_avail, error, entry = self.stargate.addr_manager.verify_address_available(address)  # pylint: disable=unused-variable
+                     if verify_avail == "VERIFY_OWNED":
+-                        # This address is in use by a fan gate, but someone might be (re)configuring their own gate.
+                         try:
+                             if data['owner_confirmed']:
+-                                pass # Valid, continue to save
++                                pass
+                             else:
+-                                data = { "success": False, "error": error }
++                                data = {"success": False, "error": error}
+                                 continue_to_save = False
+                         except KeyError:
+-                            data = { "success": False, "extend": "owner_unconfirmed", "error": "This address is in use by a Fan Gate - \"{entry['name']}\"" }
++                            data = {
++                                "success": False,
++                                "extend": "owner_unconfirmed",
++                                "error": f'This address is in use by a Fan Gate - "{entry["name"]}"'
++                            }
+                             continue_to_save = False
+                     elif verify_avail is False:
+-                        # This address is in use by a standard gate
+-                        data = { "success": False, "error": error }
++                        data = {"success": False, "error": error}
+                         continue_to_save = False
+-                    else:
+-                        pass # Address not in use, clear to proceed
+ 
+-                # Store the address:
+                 if continue_to_save:
+                     self.stargate.addr_manager.get_book().set_local_address(address)
+-                    data = { "success": True, "message": "There are no conflicts with your chosen address.<br><br>Local Address Saved." }
++                    data = {
++                        "success": True,
++                        "message": "There are no conflicts with your chosen address.<br><br>Local Address Saved."
++                    }
+ 
+             elif self.path == '/update/subspace_ip':
+                 try:
+                     self.stargate.subspace_client.set_ip_address(data['ip'])
+-                    data = { "success": True, "message": "Subspace IP Address Saved." }
+-                except ValueError as ex:
+-                    data = { "success": False, "message": str(ex) }
++                    data = {"success": True, "message": "Subspace IP Address Saved."}
++                except ValueError as exc:
++                    data = {"success": False, "message": str(exc)}
+ 
+             elif self.path == '/update/config':
+                 try:
+                     message = self.stargate.cfg.set_bulk(data)
+-                    data = { "success": True, "message": "Configuration Saved", "results": message }
+-                except (NameError, ValueError) as ex:
+-                    data = { "success": False, "message": str(ex) }
++                    data = {"success": True, "message": "Configuration Saved", "results": message}
++                except (NameError, ValueError) as exc:
++                    data = {"success": False, "message": str(exc)}
+ 
+             else:
+-                # Unknown path, send 404
+                 self.send_response(404, 'Not Found')
+                 self.end_headers()
+                 return
+ 
+-            # If we have data, send it, else send a bare 200 OK
+             if data:
+                 self.send_json_response(data)
+             else:
+@@ -363,17 +574,31 @@
+ 
+             return
+ 
+-        except: # pylint: disable=bare-except
+-            if self.stargate.cfg.get("control_api_debug_enable"): # pylint: disable=no-member
++        except:  # pylint: disable=bare-except
++            if self.stargate.cfg.get("control_api_debug_enable"):  # pylint: disable=no-member
+                 raise
+ 
+-            # Encountered an exception: send a 500
+             self.send_response(500, "Exception")
+             self.end_headers()
+ 
+     def send_json_response(self, data):
+-        content = json.dumps( data )
++        content = json.dumps(data)
+         self.send_response(200, 'OK')
+-        self.send_header("Content-type", "text/json")
++        self.send_header("Content-type", "application/json")
++        self.send_header("Access-Control-Allow-Origin", "*")
++        self.send_header("Access-Control-Allow-Headers", 'Authorization, Content-Type')
++        self.send_header("Access-Control-Allow-Methods", 'POST, GET')
+         self.end_headers()
+         self.wfile.write(content.encode())
++
++    def get_home_dial_path(self):
++        try:
++            page = self.stargate.cfg.get("web_home_redirect_page")
++        except Exception:
++            page = "retro/dial.html"
++
++        if page not in ("retro/dial.html", "retro/dial9.html"):
++            page = "retro/dial.html"
++
++        return "/" + page
++
+diff -ruN original/config/defaults-milkyway/config.json.dist upgraded/config/defaults-milkyway/config.json.dist
+--- original/config/defaults-milkyway/config.json.dist	2026-05-14 20:20:25
++++ upgraded/config/defaults-milkyway/config.json.dist	2026-05-15 08:36:47
+@@ -256,6 +256,20 @@
+     "desc": "The API Endpoint URL for the Software Update service",
+     "type": "str"
+   },
++  "web_home_redirect_enabled": {
++    "value": false,
++    "desc": "True to open the selected retro dialing page when visiting the main Stargate web address",
++    "type": "bool"
++  },
++  "web_home_redirect_page": {
++    "value": "retro/dial.html",
++    "desc": "Which retro dialing page should open when the main Stargate web address is opened",
++    "type": "str-enum",
++    "enum_values": [
++      "retro/dial.html",
++      "retro/dial9.html"
++    ]
++  },
+   "stepper_acceleration_steps": {
+     "value": 40,
+     "desc": "Over how many steps should the symbol ring accelerate/decelerate?",
+@@ -369,5 +383,17 @@
+     "min_value": 0,
+     "max_value": false,
+     "units": "Minutes"
++  },
++
++  "use_dynamic_wormhole": {
++    "value": false,
++    "desc": "True to use the dynamic animated wormhole effect instead of the original static wormhole patterns",
++    "type": "bool"
++  },
++
++  "use_dynamic_wormhole_for_incoming": {
++    "value": false,
++    "desc": "True to force the dynamic animated wormhole effect for every incoming wormhole, even when use_dynamic_wormhole is false",
++    "type": "bool"
+   }
+ }
+diff -ruN original/web/debug.htm upgraded/web/debug.htm
+--- original/web/debug.htm	2026-05-14 20:20:25
++++ upgraded/web/debug.htm	2026-05-06 21:57:02
+@@ -1,145 +1,591 @@
+-<!--
+-*******************************************************************
+-***   Kristian's Stargate Project - TheStargateProject.com      ***
+-*******************************************************************
+-***                                                             ***
+-***   Original Software written by Kristian Tysse               ***
+-***   Restructuring and Development by Jonathan Moyes           ***
+-***                                                             ***
+-*******************************************************************
+--->
+-
+-<!doctype html>
+-<html lang="en">
+-  <head>
+-    <meta charset="utf-8">
+-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+-    <meta name="author" content="Jonathan Moyes">
+-    <link rel="shortcut icon" type="image/x-icon" href="img/favicon.ico"/>
+-
+-    <title>Testing & Debug | Stargate Command</title>
+-
+-    <!-- Bootstrap core CSS -->
+-    <link rel="stylesheet" href="lib/jquery-ui-1.13.0.custom/jquery-ui.min.css">
+-    <link href="lib/bootstrap-5/css/bootstrap.min.css" rel="stylesheet">
+-
+-    <script type="text/javascript" src="lib/jquery-3.3.1.min.js"></script>
+-    <script type="text/javascript" src="lib/jquery-ui-1.13.0.custom/jquery-ui.min.js"></script>
+-
+-    <!-- Custom styles for this template -->
+-    <link rel="stylesheet" href="main.css" />
+-
+-  </head>
+-
+-  <body>
+-
+-    <script type="text/javascript">
+-
+-      $( function() {
+-        initialize_button_handlers()
+-        doPoll();
+-      })
+-
+-    </script>
+-
+-    <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
+-      <a class="navbar-brand" href="/">Stargate Command</a>
+-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsExampleDefault" aria-controls="navbarsExampleDefault" aria-expanded="false" aria-label="Toggle navigation">
+-        <span class="navbar-toggler-icon"></span>
+-      </button>
+-
+-      <div class="collapse navbar-collapse" id="navbarsExampleDefault">
+-        <ul class="navbar-nav mr-auto">
+-          <li class="nav-item">
+-            <a class="nav-link" href="index.htm">Home</a>
+-          </li>
+-          <li class="nav-item">
+-            <a class="nav-link" href="address_book.htm">Address Book</a>
+-          </li>
+-          <li class="nav-item">
+-            <a class="nav-link" href="symbol_overview.htm">Symbols</a>
+-          </li>
+-          <li class="nav-item dropdown">
+-            <a class="nav-link dropdown-toggle" href="#" id="dropdown01" role="button" data-bs-toggle="dropdown" aria-expanded="false">Admin</a>
+-            <div class="dropdown-menu" aria-labelledby="dropdown01">
+-              <a class="dropdown-item active" href="#">Testing / Debug</a>
+-              <a class="dropdown-item" href="sound_board.htm">Sound Board</a>
+-              <a><hr></a>
+-              <a class="dropdown-item" href="config.htm">Configuration</a>
+-              <a class="dropdown-item" href="info.htm">System Information</a>
+-              <a><hr></a>
+-              <a class="dropdown-item" href="#" onClick="software_restart()">Restart Software</a>
+-              <a class="dropdown-item" href="#" onClick="host_reboot()">Reboot Raspberry Pi</a>
+-              <a class="dropdown-item" href="#" onClick="host_shutdown()">Shutdown Raspberry Pi</a>
+-            </div>
+-          </li>
+-          <li class="nav-item">
+-            <a class="nav-link" href="help.htm">Help</a>
+-          </li>
+-        </ul>
+-      </div>
+-    </nav>
+-
+-    <div class='header_image_container'>
+-      <img class='header_image' src="img/header.jpg" alt="">
+-    </div>
+-
+-    <main role="main" class="container">
+-
+-      <div class="debug_button_container">
+-
+-        <h4>Symbol Ring</h4>
+-        <button type="button" class="btn-secondary controlButton" action="symbol_forward">Forward</button>
+-        <button type="button" class="btn-secondary controlButton" action="symbol_backward">Backward</button>
+-        <button type="button" class="btn-secondary controlButton" action="set_glyph_ring_zero">Set Position=0 (Earth at top)</button>
+-
+-        <hr />
+-
+-        <h4>Lighting Control </h4>
+-        <button type="button" class="btn-secondary controlButton" action="all_chevron_leds_on">All Chevrons On</button>
+-        <button type="button" class="btn-secondary controlButton" action="all_chevron_leds_off">All Chevrons Off</button>
+-
+-        <hr />
+-        <h4>Wormhole Manual Control</h4>
+-        <button type="button" class="btn-secondary controlButton" action="wormhole_on">Open Wormhole</button>
+-        <button type="button" class="btn-secondary controlButton" action="wormhole_off">Close Wormhole</button>
+-
+-        <hr />
+-        <h4>Cycle Chevrons (Motors, Lights, Sound)</h4>
+-        <button type="button" class="btn-secondary cycleChevronButton" chevron_number='1'>Chevron 1</button>
+-        <button type="button" class="btn-secondary cycleChevronButton" chevron_number='2'>Chevron 2</button>
+-        <button type="button" class="btn-secondary cycleChevronButton" chevron_number='3'>Chevron 3</button>
+-        <button type="button" class="btn-secondary cycleChevronButton" chevron_number='4'>Chevron 4</button>
+-        <button type="button" class="btn-secondary cycleChevronButton" chevron_number='5'>Chevron 5</button>
+-        <button type="button" class="btn-secondary cycleChevronButton" chevron_number='6'>Chevron 6</button>
+-        <button type="button" class="btn-secondary cycleChevronButton" chevron_number='7'>Chevron 7</button>
+-        <button type="button" class="btn-secondary cycleChevronButton" chevron_number='8'>Chevron 8</button>
+-        <button type="button" class="btn-secondary cycleChevronButton" chevron_number='9'>Chevron 9</button>
+-
+-        <hr />
+-        <h4>Sound & Volume</h4>
+-        <button type="button" class="btn-secondary controlButton" action="volume_down">Volume Down</button>
+-        <button type="button" class="btn-secondary controlButton" action="volume_up">Volume Up</button>
+-
+-        <hr />
+-        <h4>Simulate</h4>
+-        <button type="button" class="btn-secondary controlButton" action="simulate_incoming">Incoming Wormhole</button>
+-        <button type="button" class="btn-secondary controlButton" action="wormhole_off">Disconnect</button>
+-
+-        <hr />
+-        <h4>Dial Home Device</h4>
+-        <button type="button" class="btn-secondary controlButton" action="dhd_test_enable">Test Mode<br>Enable</button>
+-        <button type="button" class="btn-secondary controlButton" action="dhd_test_disable">Test Mode<br>Disable</button>
+-      </div><!-- /. button container -->
+-    </main><!-- /.container -->
+-
+-    <!-- Bootstrap core JavaScript
+-    ================================================== -->
+-    <!-- Placed at the end of the document so the pages load faster -->
+-    
+-    <script src="/lib/bootstrap-5/js/bootstrap.bundle.min.js"></script>
+-    <script src="/js/top_menu.js"></script>
+-    <script src="/js/gate_offline_polling.js"></script>
+-    <script src="/js/debug.js"></script>
+-  </body>
+-</html>
++<!--
++*******************************************************************
++***   Kristian's Stargate Project - TheStargateProject.com      ***
++*******************************************************************
++***                                                             ***
++***   Original Software written by Kristian Tysse               ***
++***   Restructuring and Development by Jonathan Moyes           ***
++***                                                             ***
++*******************************************************************
++-->
++
++<!doctype html>
++<html lang="en">
++  <head>
++    <meta charset="utf-8">
++    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
++    <meta name="author" content="Jonathan Moyes">
++    <link rel="shortcut icon" type="image/x-icon" href="img/favicon.ico"/>
++
++    <title>Testing & Debug | Stargate Command</title>
++
++    <!-- Bootstrap core CSS -->
++    <link rel="stylesheet" href="lib/jquery-ui-1.13.0.custom/jquery-ui.min.css">
++    <link href="lib/bootstrap-5/css/bootstrap.min.css" rel="stylesheet">
++
++    <script type="text/javascript" src="lib/jquery-3.3.1.min.js"></script>
++    <script type="text/javascript" src="lib/jquery-ui-1.13.0.custom/jquery-ui.min.js"></script>
++
++    <!-- Custom styles for this template -->
++    <link rel="stylesheet" href="main.css" />
++
++    <style>
++      .volume-meter-wrap {
++        display: flex;
++        flex-direction: column;
++        align-items: flex-start;
++        gap: 10px;
++      }
++
++      .volume-buttons-wrap {
++        display: flex;
++        flex-wrap: wrap;
++        gap: 10px;
++        align-items: center;
++        justify-content: flex-start;
++      }
++
++      .volume-meter-panel {
++        display: flex;
++        flex-direction: column;
++        gap: 6px;
++        width: auto;
++        align-items: flex-start;
++      }
++
++      .volume-meter-shell {
++        padding: 0;
++        width: auto;
++        margin-left: 14px;
++      }
++
++      .volume-meter {
++        display: flex;
++        flex-wrap: nowrap;
++        gap: 3px;
++        align-items: center;
++        justify-content: flex-start;
++        width: auto;
++        min-height: 26px;
++      }
++
++      .volume-seg {
++        width: 10px;
++        min-width: 10px;
++        height: 20px;
++        border-radius: 2px;
++        background: rgba(255, 255, 255, 0.06);
++        border: 1px solid rgba(255, 255, 255, 0.10);
++        box-sizing: border-box;
++        opacity: 0.18;
++        transition:
++          opacity 0.14s ease,
++          transform 0.14s ease,
++          box-shadow 0.14s ease,
++          filter 0.14s ease,
++          background 0.14s ease,
++          border-color 0.14s ease;
++      }
++
++      .volume-seg.on {
++        opacity: 1;
++      }
++
++      .volume-seg.on.tone-low {
++        background: linear-gradient(to bottom, #ffe975 0%, #ffd43b 100%);
++        border-color: rgba(255, 229, 116, 0.95);
++        box-shadow:
++          0 0 8px rgba(255, 212, 59, 0.65),
++          0 0 18px rgba(255, 212, 59, 0.28);
++      }
++
++      .volume-seg.on.tone-mid {
++        background: linear-gradient(to bottom, #ffb85a 0%, #ff9322 100%);
++        border-color: rgba(255, 177, 89, 0.95);
++        box-shadow:
++          0 0 8px rgba(255, 147, 34, 0.68),
++          0 0 18px rgba(255, 147, 34, 0.30);
++      }
++
++      .volume-seg.on.tone-high {
++        background: linear-gradient(to bottom, #ff6f3d 0%, #ff4c10 100%);
++        border-color: rgba(255, 122, 76, 0.95);
++        box-shadow:
++          0 0 10px rgba(255, 76, 16, 0.70),
++          0 0 20px rgba(255, 76, 16, 0.34);
++      }
++
++      .volume-seg.on.tone-max {
++        background: linear-gradient(to bottom, #a11414 0%, #4b0000 100%);
++        border-color: rgba(166, 46, 46, 0.95);
++        box-shadow:
++          0 0 10px rgba(139, 0, 0, 0.68),
++          0 0 20px rgba(139, 0, 0, 0.30);
++      }
++
++      .volume-seg.pulse {
++        animation: volumePulse 0.28s ease-out;
++      }
++
++      @keyframes volumePulse {
++        0% {
++          transform: scale(1);
++          filter: brightness(1);
++        }
++        35% {
++          transform: scale(1.08);
++          filter: brightness(1.32);
++        }
++        100% {
++          transform: scale(1);
++          filter: brightness(1);
++        }
++      }
++
++      .volume-meter-footer {
++        display: flex;
++        justify-content: flex-start;
++        align-items: center;
++        width: auto;
++      }
++
++      .volume-meter-label {
++        font-size: 12px;
++        color: #ffffff;
++        user-select: none;
++        text-align: right;
++        letter-spacing: 0.5px;
++      }
++
++      .wormhole-dialog-buttons {
++        display: flex;
++        flex-direction: column;
++        gap: 12px;
++      }
++
++      .wormhole-dialog-buttons .btn-secondary {
++        width: 100%;
++      }
++    </style>
++
++    <script type="text/javascript">
++      $(function() {
++        initialize_button_handlers();
++        doPoll();
++      });
++    </script>
++  </head>
++
++  <body>
++
++    <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
++      <a class="navbar-brand" href="/">Stargate Command</a>
++      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsExampleDefault" aria-controls="navbarsExampleDefault" aria-expanded="false" aria-label="Toggle navigation">
++        <span class="navbar-toggler-icon"></span>
++      </button>
++
++      <div class="collapse navbar-collapse" id="navbarsExampleDefault">
++        <ul class="navbar-nav mr-auto">
++          <li class="nav-item">
++            <a class="nav-link" href="index.htm">Home</a>
++          </li>
++          <li class="nav-item">
++            <a class="nav-link" href="address_book.htm">Address Book</a>
++          </li>
++          <li class="nav-item">
++            <a class="nav-link" href="symbol_overview.htm">Symbols</a>
++          </li>
++          <li class="nav-item dropdown">
++            <a class="nav-link dropdown-toggle" href="#" id="dropdown01" role="button" data-bs-toggle="dropdown" aria-expanded="false">Admin</a>
++            <div class="dropdown-menu" aria-labelledby="dropdown01">
++              <a class="dropdown-item active" href="#">Testing / Debug</a>
++              <a class="dropdown-item" href="connection_history.htm">Connection History</a>
++              <a><hr></a>
++              <a class="dropdown-item" href="config.htm">Configuration</a>
++              <a class="dropdown-item" href="info.htm">System Information</a>
++              <a><hr></a>
++              <a class="dropdown-item" href="#" onClick="software_restart()">Restart Software</a>
++              <a class="dropdown-item" href="#" onClick="host_reboot()">Reboot Raspberry Pi</a>
++              <a class="dropdown-item" href="#" onClick="host_shutdown()">Shutdown Raspberry Pi</a>
++            </div>
++          </li>
++          <li class="nav-item">
++            <a class="nav-link" href="alarm_clock.htm">Alarm Clock</a>
++          </li>
++          <li class="nav-item">
++            <a class="nav-link" href="help.htm">Help</a>
++          </li>
++        </ul>
++      </div>
++    </nav>
++
++    <div class="header_image_container">
++      <img class="header_image" src="img/header.jpg" alt="">
++    </div>
++
++    <main role="main" class="container">
++
++      <div class="debug_button_container">
++
++        <h4>Symbol Ring</h4>
++        <button type="button" class="btn-secondary controlButton" action="symbol_forward">Forward</button>
++        <button type="button" class="btn-secondary controlButton" action="symbol_backward">Backward</button>
++        <button type="button" class="btn-secondary controlButton" action="set_glyph_ring_zero">Set Position=0 (Earth at top)</button>
++
++        <hr />
++
++        <h4>Lighting Control</h4>
++        <button type="button" class="btn-secondary controlButton" action="all_chevron_leds_on">All Chevrons On</button>
++        <button type="button" class="btn-secondary controlButton" action="all_chevron_leds_off">All Chevrons Off</button>
++        <button type="button" class="btn-secondary controlButton" action="white_on">White On</button>
++        <button type="button" class="btn-secondary controlButton" action="white_off">White Off</button>
++        <button type="button" class="btn-secondary controlButton" action="dhd_on">DHD ON</button>
++        <button type="button" class="btn-secondary controlButton" action="dhd_off">DHD OFF</button>
++
++        <hr />
++
++        <h4>Wormhole Manual Control</h4>
++        <button type="button" class="btn-secondary controlButton" id="openWormholeMenuButton">Open Wormhole</button>
++        <button type="button" class="btn-secondary controlButton" action="wormhole_off">Close Wormhole</button>
++
++        <div id="wormholePickerDialog" title="Select Wormhole Type" style="display:none;">
++          <div class="wormhole-dialog-buttons">
++            <button type="button" class="btn-secondary wormholeChoiceButton" data-action="wormhole_on">Standard Wormhole</button>
++            <button type="button" class="btn-secondary wormholeChoiceButton" data-action="dynamic_wormhole_on">Dynamic Wormhole</button>
++            <button type="button" class="btn-secondary wormholeChoiceButton" data-action="blackhole_on">Black Hole</button>
++          </div>
++        </div>
++
++        <hr />
++
++        <h4>Cycle Chevrons (Motors, Lights, Sound)</h4>
++        <button type="button" class="btn-secondary cycleChevronButton" chevron_number="1">Chevron 1</button>
++        <button type="button" class="btn-secondary cycleChevronButton" chevron_number="2">Chevron 2</button>
++        <button type="button" class="btn-secondary cycleChevronButton" chevron_number="3">Chevron 3</button>
++        <button type="button" class="btn-secondary cycleChevronButton" chevron_number="4">Chevron 4</button>
++        <button type="button" class="btn-secondary cycleChevronButton" chevron_number="5">Chevron 5</button>
++        <button type="button" class="btn-secondary cycleChevronButton" chevron_number="6">Chevron 6</button>
++        <button type="button" class="btn-secondary cycleChevronButton" chevron_number="7">Chevron 7</button>
++        <button type="button" class="btn-secondary cycleChevronButton" chevron_number="8">Chevron 8</button>
++        <button type="button" class="btn-secondary cycleChevronButton" chevron_number="9">Chevron 9</button>
++
++        <hr />
++
++        <h4>Sound & Volume</h4>
++
++        <div class="volume-meter-wrap">
++          <div class="volume-buttons-wrap">
++            <button type="button" class="btn-secondary controlButton" action="volume_up">Volume Up</button>
++            <button type="button" class="btn-secondary controlButton" action="volume_down">Volume Down</button>
++          </div>
++
++          <div class="volume-meter-panel">
++            <div class="volume-meter-shell">
++              <div id="volumeMeter" class="volume-meter" aria-label="Current volume level"></div>
++            </div>
++            <div class="volume-meter-footer">
++              <div id="volumeMeterLabel" class="volume-meter-label">VOL 0%</div>
++            </div>
++          </div>
++        </div>
++
++        <hr />
++
++        <h4>Simulate</h4>
++        <button type="button" class="btn-secondary controlButton" action="simulate_incoming">Incoming Wormhole</button>
++        <button type="button" class="btn-secondary controlButton" action="wormhole_off">Disconnect</button>
++        <label style="display:inline-flex; align-items:center; gap:25px; margin:0 0 8px 0;">
++          <input type="checkbox" id="incomingExtended" style="transform: scale(2.5);">
++        </label>
++
++        <hr />
++
++        <h4>Dial Home Device</h4>
++        <button type="button" id="dhdLedTestButton" class="btn-secondary controlButton">DHD LED Test<br>☏</button>
++        <button type="button" class="btn-secondary controlButton" action="dhd_test_enable">Test Mode<br>Enable</button>
++        <button type="button" class="btn-secondary controlButton" action="dhd_test_disable">Test Mode<br>Disable</button>
++
++      </div>
++    </main>
++
++    <!-- DHD LED TEST JS (dialog + POST to /do/dhd_led_test) -->
++    <script type="text/javascript">
++      function runDhdTest(mode) {
++        $.post({
++          url: 'stargate/do/dhd_led_test',
++          data: JSON.stringify({ mode: mode }),
++          contentType: 'application/json'
++        })
++        .done(function() {
++          $("<div>DHD LED test '" + mode + "' started. Check logs.</div>").dialog();
++        })
++        .fail(function() {
++          $("<div>Failed to start DHD LED test.</div>").dialog();
++        });
++      }
++
++      function openDhdTestDialog() {
++        var $dlg = $('<div title="Select DHD LED test">' +
++          '<p>Choose which DHD LED test you want to run:</p>' +
++          '<button class="dhdTestChoice" data-mode="full">Full suite</button><br>' +
++          '<button class="dhdTestChoice" data-mode="center">Center pixel only</button><br>' +
++          '<button class="dhdTestChoice" data-mode="brightness">Brightness sweep</button><br>' +
++          '<button class="dhdTestChoice" data-mode="gradient">Rainbow gradient</button><br>' +
++          '<button class="dhdTestChoice" data-mode="ring_chase">Ring chase</button><br>' +
++          '<button class="dhdTestChoice" data-mode="random_strobe">Random strobe</button><br>' +
++          '<button class="dhdTestChoice" data-mode="individual">Individual LED test</button>' +
++          '</div>');
++
++        $dlg.on('click', '.dhdTestChoice', function() {
++          var mode = $(this).data('mode');
++          $dlg.dialog('close');
++          runDhdTest(mode);
++        });
++
++        $dlg.dialog({
++          modal: true,
++          width: 350
++        });
++      }
++
++      function initialize_dhd_led_test_button() {
++        $('#dhdLedTestButton').off('click');
++
++        $('#dhdLedTestButton').on('click', function(e) {
++          e.preventDefault();
++          e.stopPropagation();
++          openDhdTestDialog();
++        });
++      }
++
++      $(function() {
++        initialize_dhd_led_test_button();
++      });
++    </script>
++
++    <!-- WORMHOLE PICKER -->
++    <script type="text/javascript">
++      function openWormholeAction(actionName) {
++        $.post('stargate/do/' + actionName)
++          .fail(function() {
++            $("<div>Failed to start wormhole.</div>").dialog();
++          });
++      }
++
++      function initialize_wormhole_picker() {
++        $('#openWormholeMenuButton').off('click').on('click', function(e) {
++          e.preventDefault();
++          e.stopPropagation();
++
++          $('#wormholePickerDialog').dialog({
++            modal: true,
++            width: 320,
++            resizable: false
++          });
++        });
++
++        $('.wormholeChoiceButton').off('click').on('click', function() {
++          var actionName = $(this).data('action');
++          $('#wormholePickerDialog').dialog('close');
++          openWormholeAction(actionName);
++        });
++      }
++
++      $(function() {
++        initialize_wormhole_picker();
++      });
++    </script>
++
++    <!-- REAL AUDIO VOLUME METER -->
++    <script type="text/javascript">
++      var lastVolumePercent = null;
++      var volumePollInterval = null;
++      var volumeActionInProgress = false;
++      var volumeRefreshToken = 0;
++      var TOTAL_SEGMENTS = 20;
++
++      function parseAudioVolume(rawValue) {
++        if (rawValue === undefined || rawValue === null) {
++          return null;
++        }
++
++        if (typeof rawValue === "number") {
++          return Math.max(0, Math.min(100, rawValue));
++        }
++
++        var text = String(rawValue).trim();
++        var match = text.match(/(\d+)/);
++
++        if (!match) {
++          return null;
++        }
++
++        var parsed = parseInt(match[1], 10);
++        if (isNaN(parsed)) {
++          return null;
++        }
++
++        return Math.max(0, Math.min(100, parsed));
++      }
++
++      function getToneClassByIndex(index) {
++        if (index < 5) {
++          return 'tone-low';
++        }
++        if (index < 10) {
++          return 'tone-mid';
++        }
++        if (index < 15) {
++          return 'tone-high';
++        }
++        return 'tone-max';
++      }
++
++      function buildVolumeMeter() {
++        var meter = document.getElementById('volumeMeter');
++        if (!meter) {
++          return;
++        }
++
++        meter.innerHTML = '';
++
++        for (var i = 0; i < TOTAL_SEGMENTS; i++) {
++          var seg = document.createElement('div');
++          seg.className = 'volume-seg';
++          seg.setAttribute('data-index', i);
++          seg.setAttribute('data-tone', getToneClassByIndex(i));
++          meter.appendChild(seg);
++        }
++      }
++
++      function drawVolumeMeter(percent, previousPercent) {
++        var segs = document.querySelectorAll('#volumeMeter .volume-seg');
++        if (!segs.length) {
++          return;
++        }
++
++        var lit = Math.round((percent / 100) * TOTAL_SEGMENTS);
++        lit = Math.max(0, Math.min(TOTAL_SEGMENTS, lit));
++
++        var prevLit = null;
++        if (previousPercent !== null && previousPercent !== undefined) {
++          prevLit = Math.round((previousPercent / 100) * TOTAL_SEGMENTS);
++          prevLit = Math.max(0, Math.min(TOTAL_SEGMENTS, prevLit));
++        }
++
++        segs.forEach(function(seg, idx) {
++          seg.classList.remove('on', 'pulse', 'tone-low', 'tone-mid', 'tone-high', 'tone-max');
++
++          if (idx < lit) {
++            seg.classList.add('on');
++            seg.classList.add(seg.getAttribute('data-tone'));
++          }
++        });
++
++        if (prevLit !== null && prevLit !== lit) {
++          if (lit > prevLit && lit > 0) {
++            segs[lit - 1].classList.add('pulse');
++          } else if (lit < prevLit && lit < segs.length) {
++            segs[Math.max(0, lit)].classList.add('pulse');
++          }
++        }
++
++        $('#volumeMeterLabel').text('VOL ' + percent + '%');
++      }
++
++      function refreshRealVolumeMeter(options) {
++        options = options || {};
++        var force = !!options.force;
++
++        if (volumeActionInProgress && !force) {
++          return;
++        }
++
++        var requestToken = ++volumeRefreshToken;
++
++        $.getJSON('stargate/get/system_info')
++          .done(function(data) {
++            if (requestToken !== volumeRefreshToken) {
++              return;
++            }
++
++            var percent = parseAudioVolume(data.audio_volume);
++            if (percent === null) {
++              return;
++            }
++
++            drawVolumeMeter(percent, lastVolumePercent);
++            lastVolumePercent = percent;
++          })
++          .fail(function() {
++          });
++      }
++
++      function pauseVolumePolling() {
++        if (volumePollInterval) {
++          clearInterval(volumePollInterval);
++          volumePollInterval = null;
++        }
++      }
++
++      function resumeVolumePolling() {
++        pauseVolumePolling();
++        volumePollInterval = setInterval(function() {
++          refreshRealVolumeMeter();
++        }, 2500);
++      }
++
++      function runVolumeSyncSequence() {
++        var delays = [90, 180, 300, 460];
++        var stepIndex = 0;
++
++        function nextStep() {
++          if (stepIndex >= delays.length) {
++            volumeActionInProgress = false;
++            refreshRealVolumeMeter({ force: true });
++            resumeVolumePolling();
++            return;
++          }
++
++          setTimeout(function() {
++            refreshRealVolumeMeter({ force: true });
++            stepIndex++;
++            nextStep();
++          }, delays[stepIndex]);
++        }
++
++        nextStep();
++      }
++
++      function initialize_real_volume_meter() {
++        buildVolumeMeter();
++        drawVolumeMeter(0, null);
++        refreshRealVolumeMeter({ force: true });
++        resumeVolumePolling();
++
++        $('button[action="volume_up"], button[action="volume_down"]')
++          .off('click.volumeMeter')
++          .on('click.volumeMeter', function() {
++            pauseVolumePolling();
++
++            if (volumeActionInProgress) {
++              return;
++            }
++
++            volumeActionInProgress = true;
++            runVolumeSyncSequence();
++          });
++      }
++
++      $(function() {
++        initialize_real_volume_meter();
++      });
++    </script>
++
++    <!-- Bootstrap & existing JS -->
++    <script src="/lib/bootstrap-5/js/bootstrap.bundle.min.js"></script>
++    <script src="/js/top_menu.js"></script>
++    <script src="/js/gate_offline_polling.js"></script>
++    <script src="/js/debug.js"></script>
++  </body>
++</html>
+diff -ruN original/web/js/debug.js upgraded/web/js/debug.js
+--- original/web/js/debug.js	2026-05-14 20:20:25
++++ upgraded/web/js/debug.js	2026-05-14 23:33:37
+@@ -18,7 +18,8 @@
+           url: 'stargate/do/chevron_cycle',
+           data: JSON.stringify({
+               chevron_number: chevron_number
+-          })
++          }),
++          contentType: 'application/json'
+       })
+       .fail(function() {
+           console.log("Failed to communicate with Stargate")
+@@ -29,12 +30,25 @@
+   $('.debug_button_container .controlButton').click(function() {
+       const action = $(this).attr('action');
+ 
+-      $.post({
++      // Default: no body
++      let payload = null;
++
++      // If this is Incoming simulation, read checkbox and send JSON
++      if (action === "simulate_incoming") {
++        const cb = document.getElementById("incomingExtended");
++        const extended = cb ? cb.checked : false;
++        payload = JSON.stringify({ extended: extended });
++      }
++
++      $.ajax({
+           url: 'stargate/do/' + action,
++          type: 'POST',
++          data: payload,
++          contentType: payload ? 'application/json' : undefined
+       })
+       .fail(function() {
+           console.log("Failed to communicate with Stargate")
+           $("<div>Failed to communicate with Stargate</div>").dialog();
+       });
+   });
+-}
++}
+\ No newline at end of file

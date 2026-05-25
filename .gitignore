@@ -1,6 +1,4 @@
+.DS_Store
 __pycache__/
 *.pyc
-*.bak
-*.backup*
-*.log
-.DS_Store
+.last_backup_path

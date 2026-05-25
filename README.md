@@ -1,152 +1,42 @@
-# SG1 Dynamic Wormhole Patch
+# Dynamic Wormhole
 
-A lightweight Dynamic Wormhole add-on for **Kristian’s Stargate Project SG1 v4**.
+Adds dynamic wormhole and black-hole LED effects.
 
-This patch adds a live procedural wormhole animation for NeoPixel wormhole LEDs, plus a clean Debug UI workflow:
+This repository is private while it is being checked and verified.
 
-**Open Wormhole → popup selection → Standard / Dynamic / Black Hole**
-
-It is designed to work on both clean SG1 v4 installs and modified images without replacing the whole web interface.
-
----
-
-## Features
-
-- Dynamic animated wormhole effect
-- Dynamic black hole effect
-- One **Open Wormhole** button in `debug.htm`
-- Popup selector:
-  - Standard Wormhole
-  - Dynamic Wormhole
-  - Black Hole
-- Adds config options for:
-  - `use_dynamic_wormhole`
-  - `use_dynamic_wormhole_for_incoming`
-- Creates a full timestamped backup before modifying files
-
----
-
-## Installation
-
-Copy the ZIP/repo folder to your Raspberry Pi, then run:
+## Install
 
 ```bash
-cd /home/pi
-unzip Dynamic-Wormhole-main.zip
-cd Dynamic-Wormhole-main
-chmod +x install.sh
+cd /home/pi/Stargate-Final_Patches
+rm -rf Dynamic-Wormhole
+git clone https://github.com/matelv-x/Dynamic-Wormhole.git
+cd Dynamic-Wormhole
+chmod +x *.sh
 sudo ./install.sh /home/pi/sg1_v4
 sudo systemctl restart stargate.service
 ```
 
-If installing from a cloned repo:
+## Restore / uninstall
 
 ```bash
-cd /home/pi/Dynamic-Wormhole-main
-sudo ./install.sh /home/pi/sg1_v4
+cd /home/pi/Stargate-Final_Patches/Dynamic-Wormhole
+chmod +x restore.sh
+sudo ./restore.sh /home/pi/sg1_v4
 sudo systemctl restart stargate.service
 ```
 
----
+## What it changes
 
-## Test
+- Adds dynamic blue wormhole and black-hole animation behavior.
+- Adds debug actions for normal, dynamic and black-hole wormhole tests.
+- Adds config support for dynamic wormhole behavior.
 
-Open:
+## Attribution and originality
 
-```text
-http://YOUR_PI_IP:8080/debug.htm
-```
+Original base project: StargateProject SG1 software from the BuildAStargate/Jordan/Kristian/Jonnerd project lineage.
 
-Click:
+Additional source/idea credit: Inspired by Kristian/Jonnerd StargateProject wormhole LED behavior and Marcin/Codex animation work.
 
-```text
-Open Wormhole
-```
+How much is copied or changed: Medium patch. It modifies selected wormhole manager, config and debug files rather than replacing the whole project.
 
-Then select:
-
-```text
-Dynamic Wormhole
-```
-
-Check logs:
-
-```bash
-tail -n 80 /home/pi/sg1_v4/logs/milkyway.log
-```
-
-Expected log:
-
-```text
-Opening Wormhole! black_hole=False, dynamic=True
-```
-
----
-
-## Files Modified
-
-### Replaced
-
-```text
-classes/StargateMilkyWay/wormhole_manager.py
-classes/StargateMilkyWay/wormhole_pattern_manager.py
-```
-
-These files contain the Dynamic Wormhole and Dynamic Black Hole animation logic.
-
-### Patched in-place
-
-```text
-classes/web_server.py
-web/debug.htm
-config/milkyway-config.json
-config/defaults-milkyway/config.json.dist
-```
-
-The installer injects only the required lines instead of replacing the full files.
-
----
-
-## Restore Backup
-
-The installer creates a backup like:
-
-```text
-/home/pi/sg1_v4_backup_dynamic_wormhole_only_YYYYMMDD_HHMMSS
-```
-
-Restore example:
-
-```bash
-sudo systemctl stop stargate.service
-sudo rsync -a --delete /home/pi/sg1_v4_backup_dynamic_wormhole_only_YYYYMMDD_HHMMSS/ /home/pi/sg1_v4/
-sudo systemctl start stargate.service
-```
-
----
-
-## Recommended Hardware
-
-- Raspberry Pi running SG1 v4
-- NeoPixel wormhole LED ring
-- Existing SG1 v4 wormhole pixel support
-
----
-
-## License
-
-This patch is provided as a hobby add-on for Stargate fan projects.  
-Use at your own risk and always keep backups.
-
-
-## Final compatibility fixes
-
-This installer includes universal endpoint handling:
-
-- If `/do/dynamic_wormhole_on` exists, it continues.
-- If `/do/dynamic_wormhole_on` is missing, it adds it.
-- If `/do/blackhole_on` exists, it continues.
-- If `/do/blackhole_on` is missing, it adds it.
-- If the image does not contain a `blackhole_on` marker, it uses `wormhole_on` as the insertion point.
-
-The Open Wormhole button keeps the normal debug button style while blocking the default `controlButton` click handler, so the popup opens without the extra “Failed to communicate with Stargate” message.
+The included `*.patch` file, when present, shows the exact text-level changes against the base software used while packaging.
