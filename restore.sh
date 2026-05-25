@@ -1,43 +1,49 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TARGET="/home/pi/sg1_v4"
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --target)
-      TARGET="$2"
-      shift 2
-      ;;
-    *)
-      TARGET="$1"
-      shift
-      ;;
-  esac
+TARGET="${1:-/home/pi/sg1_v4}"
+if [[ "$TARGET" == "--target" ]]; then
+  TARGET="${2:-/home/pi/sg1_v4}"
+fi
+
+fail() { echo "ERROR: $1" >&2; exit 1; }
+
+[ -d "$TARGET" ] || fail "Target folder not found: $TARGET"
+
+if ! sudo -n true 2>/dev/null; then
+  echo "This restore needs sudo because stargate files may be owned by root."
+  sudo true
+fi
+
+BACKUP="$(ls -dt "${TARGET}"_backup_dynamic_wormhole_only_* 2>/dev/null | head -n 1 || true)"
+[ -n "$BACKUP" ] || fail "No Dynamic Wormhole backup found: ${TARGET}_backup_dynamic_wormhole_only_*"
+[ -d "$BACKUP" ] || fail "Backup folder does not exist: $BACKUP"
+
+echo "Restoring Dynamic Wormhole files from:"
+echo "  $BACKUP"
+
+sudo systemctl stop stargate.service || true
+
+for rel in \
+  "classes/StargateMilkyWay/wormhole_manager.py" \
+  "classes/StargateMilkyWay/wormhole_pattern_manager.py" \
+  "classes/web_server.py" \
+  "web/debug.htm" \
+  "config/milkyway-config.json" \
+  "config/defaults-milkyway/config.json.dist"
+do
+  if [ -e "$BACKUP/$rel" ]; then
+    sudo mkdir -p "$(dirname "$TARGET/$rel")"
+    sudo rm -rf "$TARGET/$rel"
+    sudo cp -a "$BACKUP/$rel" "$TARGET/$rel"
+    echo "Restored: $rel"
+  else
+    echo "Skipped missing backup file: $rel"
+  fi
 done
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_FILE="$SCRIPT_DIR/.last_backup_path"
-BACKUP_ROOT="${BACKUP_ROOT:-/home/pi}"
-BACKUP_DIR=""
+sudo find "$TARGET/classes" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+sudo chown -R pi:pi "$TARGET"
+sudo systemctl start stargate.service
 
-if [ -f "$BACKUP_FILE" ]; then
-  BACKUP_DIR="$(cat "$BACKUP_FILE")"
-fi
-
-if [ -z "$BACKUP_DIR" ] || [ ! -d "$BACKUP_DIR" ]; then
-  BACKUP_DIR="$(find "$BACKUP_ROOT" -maxdepth 1 -type d -name 'sg1_v4_backup_dynamic_wormhole_*' 2>/dev/null | sort | tail -n 1)"
-fi
-
-if [ -z "$BACKUP_DIR" ] || [ ! -d "$BACKUP_DIR" ]; then
-  echo "ERROR: no backup found. Expected .last_backup_path or $BACKUP_ROOT/sg1_v4_backup_dynamic_wormhole_*" >&2
-  exit 1
-fi
-
-echo "Restoring from: $BACKUP_DIR"
-sudo systemctl stop stargate.service 2>/dev/null || true
-sudo rm -rf "$TARGET"
-sudo cp -a "$BACKUP_DIR" "$TARGET"
-sudo find "$TARGET" -type d -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true
-sudo chown -R pi:pi "$TARGET" 2>/dev/null || true
-sudo systemctl start stargate.service 2>/dev/null || true
-echo "Restore complete: $TARGET"
+echo "=== DYNAMIC WORMHOLE RESTORE COMPLETE ==="
