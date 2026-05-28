@@ -2,7 +2,7 @@
 
 Lightweight Dynamic Wormhole add-on for Kristian/Jonnerd SG1 v4 images.
 
-This repository is private while it is being checked and verified.
+
 
 ## Install
 
