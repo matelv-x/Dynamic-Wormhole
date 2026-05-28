@@ -34,7 +34,7 @@ sudo systemctl restart stargate.service
 
 ## Attribution and originality
 
-Original base project: StargateProject SG1 software from the BuildAStargate/Jordan/Kristian/Jonnerd project lineage.
+Original base project: StargateProject SG1 https://github.com/jonnerd154/StargateProject-software.
 
 Additional source/idea credit: Feature idea by matelv-x/Codex over StargateProject wormhole LED code.
 
