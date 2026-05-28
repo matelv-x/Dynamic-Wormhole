@@ -7,12 +7,28 @@ Lightweight Dynamic Wormhole add-on for Kristian/Jonnerd SG1 v4 images.
 
 ## Install
 
-Clone or unzip this add-on into `/home/pi`, then run:
+## Method 1 — GitHub Clone (Recommended)
 
 ```bash
 cd /home/pi
 rm -rf Dynamic-Wormhole
 git clone https://github.com/matelv-x/Dynamic-Wormhole.git
+cd Dynamic-Wormhole
+chmod +x install.sh restore.sh
+sudo ./install.sh /home/pi/sg1_v4
+sudo systemctl restart stargate.service
+```
+
+## Method 2 — ZIP Download
+
+1. Download and extract the ZIP archive into:
+
+/home/pi/Dynamic-Wormhole
+
+2. Then run:
+
+```bash
+cd /home/pi/Dynamic-Wormhole
 cd Dynamic-Wormhole
 chmod +x install.sh restore.sh
 sudo ./install.sh /home/pi/sg1_v4
