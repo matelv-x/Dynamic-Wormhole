@@ -2,6 +2,7 @@
 
 Lightweight Dynamic Wormhole add-on for Kristian/Jonnerd SG1 v4 images.
 
+<img width="1343" height="175" alt=" Dynamic" src="https://github.com/user-attachments/assets/5e5b7457-563b-4be0-aca8-4972ef7af26a" />
 
 
 ## Install
