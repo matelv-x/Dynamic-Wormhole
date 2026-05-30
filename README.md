@@ -46,6 +46,8 @@ sudo systemctl restart stargate.service
 ## What it changes
 
 - Adds dynamic wormhole and black-hole effects.
+- Runs an independent 45-second Kawoosh opening phase before a normal or dynamic wormhole animation begins.
+- Leaves the separate Lamp Mode `Kawoosh Loop` option available.
 - Adds Debug UI popup selector.
 - Injects required endpoint/config changes where needed.
 

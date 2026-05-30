@@ -5,6 +5,8 @@ import math
 
 from wormhole_animation_manager import WormholeAnimationManager
 
+KAWOOSH_OPEN_SECONDS = 45
+
 class WormholeManager:
     """
     This class handles all things wormhole. It takes the stargate object as input.
@@ -52,7 +54,11 @@ class WormholeManager:
         self.audio.sound_start('wormhole_open')  # Open wormhole audio
 
         if not self.stargate.black_hole:
-            self.animation_manager.animate_kawoosh()
+            kawoosh_end_time = time() + KAWOOSH_OPEN_SECONDS
+            self.log.log(f'Kawoosh opening phase started for {KAWOOSH_OPEN_SECONDS} seconds')
+            while self.stargate.wormhole_active and time() < kawoosh_end_time:
+                self.animation_manager.animate_kawoosh()
+            self.log.log('Kawoosh opening phase finished')
 
     def close_wormhole(self):
         """
