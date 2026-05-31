@@ -5,7 +5,7 @@ import math
 
 from wormhole_animation_manager import WormholeAnimationManager
 
-KAWOOSH_OPEN_SECONDS = 20
+KAWOOSH_OPEN_SECONDS = 10
 
 class WormholeManager:
     """
