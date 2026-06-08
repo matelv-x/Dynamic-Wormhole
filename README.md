@@ -46,6 +46,7 @@ sudo systemctl restart stargate.service
 ## What it changes
 
 - Adds dynamic wormhole and black-hole effects.
+- Limits the dynamic LED refresh rate to reduce CPU/thread pressure on Pi 3.
 - Runs an independent 5-second Kawoosh opening phase before a normal or dynamic wormhole animation begins.
 - Leaves the separate Lamp Mode `Kawoosh Loop` option available.
 - Adds Debug UI popup selector.

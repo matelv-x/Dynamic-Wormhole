@@ -6,6 +6,7 @@ import math
 from wormhole_animation_manager import WormholeAnimationManager
 
 KAWOOSH_OPEN_SECONDS = 5
+DYNAMIC_WORMHOLE_FRAME_SECONDS = 0.04
 
 class WormholeManager:
     """
@@ -143,7 +144,7 @@ class WormholeManager:
                     dynamic_pattern = self.animation_manager.pattern_manager.dynamic_wormhole_step()
 
                 self.animation_manager.set_wormhole_pattern(dynamic_pattern)
-                sleep(0.01)
+                sleep(DYNAMIC_WORMHOLE_FRAME_SECONDS)
 
             else:
                 self.animation_manager.do_random_transitions(self.stargate.black_hole)
@@ -161,6 +162,7 @@ class WormholeManager:
             self.audio.play_random_clip("38min")  # The 38min ones.
             self.audio.random_clip_wait_done()  # wait until it's finished.
 
+        self.animation_manager.pattern_manager.stop_dynamic_wormhole()
         self.close_wormhole()
         if self.audio.is_playing('wormhole_established'):
             self.audio.sound_stop('wormhole_established')
