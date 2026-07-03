@@ -60,4 +60,3 @@ Original base project: StargateProject SG1 https://github.com/jonnerd154/Stargat
 
 Additional source/idea credit: Feature idea by matelv-x/Codex over StargateProject wormhole LED code.
 
-How much is copied or changed: Medium script/overlay patch with robust insertion logic.
