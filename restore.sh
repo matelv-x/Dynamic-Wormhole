@@ -42,8 +42,14 @@ do
   fi
 done
 
+# This file belongs only to the add-on, so an older SG1 v4 backup normally
+# does not contain it. Remove it during restore instead of leaving dead code.
+if [ ! -e "$BACKUP/classes/StargateMilkyWay/dynamic_wormhole_runtime.py" ]; then
+  sudo rm -f "$TARGET/classes/StargateMilkyWay/dynamic_wormhole_runtime.py"
+  echo "Removed add-on file: classes/StargateMilkyWay/dynamic_wormhole_runtime.py"
+fi
+
 sudo find "$TARGET/classes" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-sudo chown -R pi:pi "$TARGET"
 sudo systemctl start stargate.service
 
 echo "=== DYNAMIC WORMHOLE RESTORE COMPLETE ==="

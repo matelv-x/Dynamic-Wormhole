@@ -19,18 +19,24 @@ if [[ ! -d "$TARGET" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP="${TARGET}_backup_dynamic_wormhole_only_$(date +%Y%m%d_%H%M%S)"
+BACKUP_BASE="${TARGET}_backup_dynamic_wormhole_only_$(date +%Y%m%d_%H%M%S)"
+BACKUP="$BACKUP_BASE"
+BACKUP_INDEX=1
+while [[ -e "$BACKUP" ]]; do
+  BACKUP="${BACKUP_BASE}_${BACKUP_INDEX}"
+  BACKUP_INDEX=$((BACKUP_INDEX + 1))
+done
 
 echo "=== Creating backup ==="
 cp -a "$TARGET" "$BACKUP"
 echo "Backup created: $BACKUP"
 
-echo "=== Installing Dynamic Wormhole only + config options ==="
-cp "$SCRIPT_DIR/files/classes/StargateMilkyWay/wormhole_manager.py" \
-   "$TARGET/classes/StargateMilkyWay/wormhole_manager.py"
+echo "=== Installing Dynamic Wormhole surgical integration ==="
+install -m 0644 \
+  "$SCRIPT_DIR/files/classes/StargateMilkyWay/dynamic_wormhole_runtime.py" \
+  "$TARGET/classes/StargateMilkyWay/dynamic_wormhole_runtime.py"
 
-cp "$SCRIPT_DIR/files/classes/StargateMilkyWay/wormhole_pattern_manager.py" \
-   "$TARGET/classes/StargateMilkyWay/wormhole_pattern_manager.py"
+python3 "$SCRIPT_DIR/scripts/patch_core.py" "$TARGET"
 
 echo "=== Patching only required dynamic wormhole parts ==="
 python3 - "$TARGET" <<'PY'
@@ -234,8 +240,12 @@ echo "=== Syntax check ==="
 python3 -m py_compile \
   "$TARGET/classes/StargateMilkyWay/wormhole_manager.py" \
   "$TARGET/classes/StargateMilkyWay/wormhole_pattern_manager.py" \
+  "$TARGET/classes/StargateMilkyWay/dynamic_wormhole_runtime.py" \
   "$TARGET/classes/web_server.py"
+
+python3 "$SCRIPT_DIR/scripts/verify_install.py" "$TARGET"
 
 echo "=== Done ==="
 echo "Restart with: sudo systemctl restart stargate.service"
-echo "Restore backup with: sudo rsync -a --delete $BACKUP/ $TARGET/"
+echo "Restore with: sudo $SCRIPT_DIR/restore.sh $TARGET"
+echo "Backup saved at: $BACKUP"

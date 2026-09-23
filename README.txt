@@ -1,5 +1,7 @@
 Dynamic Wormhole Only + Config Options Patch
 
+The installer is surgical. It does not replace complete SG1 v4 core files.
+
 This ZIP is ONLY for:
 - Dynamic Wormhole backend
 - one Open Wormhole button
@@ -22,8 +24,8 @@ It does NOT change:
 
 Install:
   cd /home/pi
-  unzip dynamic_wormhole_only_with_config_patch.zip
-  cd dynamic_wormhole_only_with_config_patch
+  git clone https://github.com/matelv-x/Dynamic-Wormhole.git
+  cd Dynamic-Wormhole
   sudo ./install.sh /home/pi/sg1_v4
   sudo systemctl restart stargate.service
 
@@ -33,4 +35,5 @@ After installing:
   - Use Dynamic Wormhole For Incoming
 
 Restore:
-  sudo rsync -a --delete /home/pi/sg1_v4_backup_dynamic_wormhole_only_YYYYMMDD_HHMMSS/ /home/pi/sg1_v4/
+  cd /home/pi/Dynamic-Wormhole
+  sudo ./restore.sh /home/pi/sg1_v4
