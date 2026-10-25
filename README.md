@@ -1,5 +1,10 @@
 # SG1 Dynamic Wormhole Patch
 
+## Stellar Archive maintenance
+
+This repository includes maintenance contract v1. Install and bounded restore
+can be launched by Stellar Archive without an automatic service restart.
+
 [![Downloads](https://img.shields.io/github/downloads/matelv-x/Dynamic-Wormhole/total?label=downloads)](https://github.com/matelv-x/Dynamic-Wormhole/releases)
 
 Lightweight Dynamic Wormhole add-on for Kristian/Jonnerd SG1 v4 images.

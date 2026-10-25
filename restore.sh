@@ -22,7 +22,9 @@ BACKUP="$(ls -dt "${TARGET}"_backup_dynamic_wormhole_only_* 2>/dev/null | head -
 echo "Restoring Dynamic Wormhole files from:"
 echo "  $BACKUP"
 
-sudo systemctl stop stargate.service || true
+if [[ "${STARGATE_ADDON_NO_RESTART:-0}" != "1" ]]; then
+  sudo systemctl stop stargate.service || true
+fi
 
 for rel in \
   "classes/StargateMilkyWay/wormhole_manager.py" \
@@ -50,6 +52,10 @@ if [ ! -e "$BACKUP/classes/StargateMilkyWay/dynamic_wormhole_runtime.py" ]; then
 fi
 
 sudo find "$TARGET/classes" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-sudo systemctl start stargate.service
+if [[ "${STARGATE_ADDON_NO_RESTART:-0}" != "1" ]]; then
+  sudo systemctl start stargate.service
+else
+  echo "Stargate restart deferred by add-on manager."
+fi
 
 echo "=== DYNAMIC WORMHOLE RESTORE COMPLETE ==="
