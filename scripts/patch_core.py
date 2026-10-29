@@ -60,10 +60,15 @@ def patch_manager(text):
     close_section = text[close_section_start:close_section_end]
 
     if "stop_dynamic_wormhole()" not in close_section:
-        marker = "        # Reset some state variables\n"
-        addition = "        self.animation_manager.pattern_manager.stop_dynamic_wormhole()\n\n" + marker
-        if marker not in close_section:
+        markers = (
+            "        # Reset some state variables\n",
+            "        # Reset runtime values on the manager that actually owns the timers.\n",
+            "        self.wormhole_max_time = self.wormhole_max_time_default\n",
+        )
+        marker = next((item for item in markers if item in close_section), None)
+        if marker is None:
             fail("Could not locate close_wormhole reset marker.")
+        addition = "        self.animation_manager.pattern_manager.stop_dynamic_wormhole()\n\n" + marker
         close_section = close_section.replace(marker, addition, 1)
 
     if "self.stargate.manual_dynamic_override = None" not in close_section:
@@ -85,7 +90,10 @@ def patch_manager(text):
             fail("Could not locate establish_wormhole opening marker.")
         text = text[:establish_start] + text[establish_start:].replace(
             marker,
-            "        self.refresh_runtime_config()\n\n" + marker,
+            "        # DYNAMIC WORMHOLE REFRESH HOOK START\n"
+            "        self.refresh_runtime_config()\n"
+            "        # DYNAMIC WORMHOLE REFRESH HOOK END\n\n"
+            + marker,
             1,
         )
 
