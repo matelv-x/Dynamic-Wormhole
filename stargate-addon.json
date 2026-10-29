@@ -1,5 +1,6 @@
 {
   "maintenance_contract": 1,
+  "uninstall_contract": 2,
   "id": "dynamic-wormhole",
   "name": "Dynamic Wormhole",
   "repository": "matelv-x/Dynamic-Wormhole",
@@ -7,5 +8,6 @@
   "detect": {"all": [{"path": "classes/StargateMilkyWay/dynamic_wormhole_runtime.py"}]},
   "install": {"argv": ["./install.sh", "{sg1_root}"], "timeout": 1200},
   "uninstall": {"argv": ["./restore.sh", "{sg1_root}"], "timeout": 900},
+  "archive_integration_files": ["classes/web_server.py"],
   "restart_required": true
 }
