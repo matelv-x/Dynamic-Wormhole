@@ -20,14 +20,17 @@ echo "Removing only Dynamic Wormhole integration blocks."
 
 if [[ "${STARGATE_ADDON_NO_RESTART:-0}" != "1" ]]; then
   sudo systemctl stop stargate.service || true
+  trap 'sudo systemctl start stargate.service >/dev/null 2>&1 || true' EXIT
 fi
 
 sudo python3 "$SCRIPT_DIR/scripts/unpatch_core.py" "$TARGET"
 sudo python3 "$SCRIPT_DIR/scripts/uninstall_overlay.py" "$TARGET"
 sudo python3 -m py_compile "$TARGET/classes/StargateMilkyWay/wormhole_manager.py" "$TARGET/classes/StargateMilkyWay/wormhole_pattern_manager.py" "$TARGET/classes/web_server.py"
+sudo rm -rf -- "$TARGET/.dynamic-wormhole-addon"
 
 sudo find "$TARGET/classes" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 if [[ "${STARGATE_ADDON_NO_RESTART:-0}" != "1" ]]; then
+  trap - EXIT
   sudo systemctl start stargate.service
 else
   echo "Stargate restart deferred by add-on manager."

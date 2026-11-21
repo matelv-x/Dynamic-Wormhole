@@ -19,17 +19,43 @@ if [[ ! -d "$TARGET" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_BASE="${TARGET}_backup_dynamic_wormhole_only_$(date +%Y%m%d_%H%M%S)"
-BACKUP="$BACKUP_BASE"
-BACKUP_INDEX=1
-while [[ -e "$BACKUP" ]]; do
-  BACKUP="${BACKUP_BASE}_${BACKUP_INDEX}"
-  BACKUP_INDEX=$((BACKUP_INDEX + 1))
-done
+STATE_DIR="$TARGET/.dynamic-wormhole-addon"
+PREINSTALL_STATE="$STATE_DIR/preinstall"
+TRANSACTION_STATE="$STATE_DIR/transaction"
+COMPACT_STATE="$SCRIPT_DIR/scripts/compact_state.py"
+SNAPSHOT_PATHS=(
+  classes/StargateMilkyWay/wormhole_manager.py
+  classes/StargateMilkyWay/wormhole_pattern_manager.py
+  classes/StargateMilkyWay/dynamic_wormhole_runtime.py
+  classes/web_server.py
+  config/milkyway-config.json
+  config/defaults-milkyway/config.json.dist
+  web/debug.htm
+)
 
-echo "=== Creating backup ==="
-cp -a "$TARGET" "$BACKUP"
-echo "Backup created: $BACKUP"
+LEGACY_SOURCE="$TARGET"
+shopt -s nullglob
+LEGACY_BACKUPS=("${TARGET}"_backup_dynamic_wormhole_only_*)
+shopt -u nullglob
+if (( ${#LEGACY_BACKUPS[@]} > 0 )) && [[ -d "${LEGACY_BACKUPS[0]}" ]]; then
+  LEGACY_SOURCE="${LEGACY_BACKUPS[0]}"
+  echo "Migrating compact pre-install state from legacy backup: $LEGACY_SOURCE"
+fi
+
+python3 "$COMPACT_STATE" capture --once --state "$PREINSTALL_STATE" \
+  --root "$TARGET" --source "$LEGACY_SOURCE" "${SNAPSHOT_PATHS[@]}"
+python3 "$COMPACT_STATE" capture --state "$TRANSACTION_STATE" \
+  --root "$TARGET" "${SNAPSHOT_PATHS[@]}"
+
+rollback_install() {
+  local result=$?
+  trap - ERR
+  echo "ERROR: installation failed; restoring compact transaction snapshot" >&2
+  python3 "$COMPACT_STATE" restore --state "$TRANSACTION_STATE" --root "$TARGET" || true
+  rm -rf -- "$TRANSACTION_STATE"
+  exit "$result"
+}
+trap rollback_install ERR
 
 echo "=== Installing Dynamic Wormhole surgical integration ==="
 install -m 0644 \
@@ -245,7 +271,10 @@ python3 -m py_compile \
 
 python3 "$SCRIPT_DIR/scripts/verify_install.py" "$TARGET"
 
+rm -rf -- "$TRANSACTION_STATE"
+trap - ERR
+
 echo "=== Done ==="
 echo "Restart with: sudo systemctl restart stargate.service"
 echo "Restore with: sudo $SCRIPT_DIR/restore.sh $TARGET"
-echo "Backup saved at: $BACKUP"
+echo "Compact pre-install state: $PREINSTALL_STATE"
